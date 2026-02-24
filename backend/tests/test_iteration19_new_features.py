@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestSleepTrackingAuth:\n    def test_get_sleep_requires_auth(self):\n        response = requests.get(f"{BASE_URL}/api/sleep?days=7")\n        assert response.status_code == 401

@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestUserUpdateWithOnboardingFields:\n    def test_users_me_endpoint_exists(self):\n        response = requests.put(f"{BASE_URL}/api/users/me", json={})\n        assert response.status_code in [401, 405, 422]

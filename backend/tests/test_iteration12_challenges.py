@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestChallengesAPI:\n    def test_get_challenges_requires_auth(self):\n        response = requests.get(f"{BASE_URL}/api/challenges")\n        assert response.status_code == 401

@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestHydrationAPI:\n    def test_get_hydration_requires_auth(self):\n        response = requests.get(f"{BASE_URL}/api/hydration")\n        assert response.status_code == 401

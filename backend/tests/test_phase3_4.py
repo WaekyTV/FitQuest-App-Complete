@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestProgramsPublicAPI:\n    def test_get_all_programs(self):\n        response = requests.get(f"{BASE_URL}/api/programs")\n        assert len(response.json()) == 6

@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestHistoryDeletionAPI:\n    def test_delete_workouts_history_requires_auth(self):\n        response = requests.delete(f"{BASE_URL}/api/history/all?type=workouts")\n        assert response.status_code == 401

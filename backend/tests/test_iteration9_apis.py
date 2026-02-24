@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://fitquest-v2.preview.emergentagent.com')\nclass TestExercisesAPI:\n    def test_exercises_endpoint_status(self):\n        response = requests.get(f"{BASE_URL}/api/exercises")\n        assert response.status_code == 200

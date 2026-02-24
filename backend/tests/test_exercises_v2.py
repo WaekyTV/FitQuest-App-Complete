@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestExercisesAPI:\n    def test_exercises_count(self):\n        response = requests.get(f"{BASE_URL}/api/exercises")\n        assert len(response.json()) == 269

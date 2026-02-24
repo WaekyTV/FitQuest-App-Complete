@@ -1,0 +1,1 @@
+import pytest\nimport requests\nimport os\nBASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')\nclass TestNutritionScoreEndpoints:\n    def test_nutrition_score_requires_auth(self):\n        response = requests.get(f"{BASE_URL}/api/nutrition/score")\n        assert response.status_code == 401
