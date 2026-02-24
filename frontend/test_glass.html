@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glass Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes wave-front {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            100% {
+                transform: translate(50%, 0) rotate(0deg);
+            }
+        }
+
+        @keyframes wave-back {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+
+            100% {
+                transform: translate(50%, 0) rotate(0deg);
+            }
+        }
+
+        @keyframes bubble {
+            0% {
+                transform: translateY(0) scale(1);
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(-20px) scale(0);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-black flex items-center justify-center min-h-screen gap-10">
+
+    <!-- Original -->
+    <div>
+        <h2 class="text-white text-center mb-4">Original</h2>
+        <button class="relative w-14 h-20 rounded-b-xl border-4 border-t-0 border-[#E0F7FA]/30 overflow-hidden"
+            style="background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); backdrop-filter: blur(2px);">
+            <div class="absolute inset-0 flex items-end px-[2px] pb-[4px]">
+                <div class="relative w-full rounded-b-lg h-[90%]">
+                    <div class="absolute inset-0 bg-[#00BFFF] opacity-90"></div>
+
+                    <div class="absolute top-[-12px] left-0 w-[200%] h-6 bg-[#0099CC] opacity-60 rounded-[40%] animate-[wave-back_4s_linear_infinite]"
+                        style="transform-origin: 50% 50%"></div>
+
+                    <div class="absolute top-[-12px] left-[-50%] w-[200%] h-6 bg-[#40CFFF] opacity-80 rounded-[40%] animate-[wave-front_3s_linear_infinite]"
+                        style="transform-origin: 50% 50%"></div>
+
+                    <div class="absolute top-[-2px] left-0 w-full h-1 bg-white/30 blur-[1px] rounded-full"></div>
+                </div>
+            </div>
+            <div
+                class="absolute top-0 right-1.5 w-1 h-[90%] bg-gradient-to-b from-white/30 to-transparent rounded-full pointer-events-none">
+            </div>
+            <div
+                class="absolute top-0 left-1.5 w-0.5 h-[90%] bg-gradient-to-b from-white/10 to-transparent rounded-full pointer-events-none">
+            </div>
+        </button>
+    </div>
+
+    <!-- Proposed Fix -->
+    <div>
+        <h2 class="text-white text-center mb-4">Proposed Fix</h2>
+        <button class="relative w-14 h-20 rounded-b-xl border-4 border-t-0 border-[#E0F7FA]/30 overflow-hidden"
+            style="background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); backdrop-filter: blur(2px);">
+            <!-- Removed px and pb, matched rounding -->
+            <div class="absolute inset-0 flex items-end">
+                <div class="relative w-full rounded-b-[8px] h-[90%]"> <!-- 12px glass - 4px border = 8px inner -->
+                    <div class="absolute inset-0 bg-[#00BFFF] opacity-90"></div>
+
+                    <div class="absolute top-[-12px] left-0 w-[200%] h-6 bg-[#0099CC] opacity-60 rounded-[40%] animate-[wave-back_4s_linear_infinite]"
+                        style="transform-origin: 50% 50%"></div>
+
+                    <div class="absolute top-[-12px] left-[-50%] w-[200%] h-6 bg-[#40CFFF] opacity-80 rounded-[40%] animate-[wave-front_3s_linear_infinite]"
+                        style="transform-origin: 50% 50%"></div>
+
+                    <div class="absolute top-[-2px] left-0 w-full h-1 bg-white/30 blur-[1px] rounded-full"></div>
+                </div>
+            </div>
+            <div
+                class="absolute top-0 right-1.5 w-1 h-[90%] bg-gradient-to-b from-white/30 to-transparent rounded-full pointer-events-none">
+            </div>
+            <div
+                class="absolute top-0 left-1.5 w-0.5 h-[90%] bg-gradient-to-b from-white/10 to-transparent rounded-full pointer-events-none">
+            </div>
+        </button>
+    </div>
+
+</body>
+
+</html>
