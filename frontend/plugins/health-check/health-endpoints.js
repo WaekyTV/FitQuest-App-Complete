@@ -1,6 +1,8 @@
 // health-endpoints.js
 // API endpoints for health checks and monitoring
+
 const os = require('os');
+
 const SERVER_START_TIME = Date.now();
 
 /**
@@ -42,11 +44,19 @@ function setupHealthEndpoints(devServer, healthPlugin) {
         hasCompiled: webpackStatus.hasCompiled,
         errors: webpackStatus.errorCount,
         warnings: webpackStatus.warningCount,
-        lastCompileTime: webpackStatus.lastCompileTime ? new Date(webpackStatus.lastCompileTime).toISOString() : null,
-        lastSuccessTime: webpackStatus.lastSuccessTime ? new Date(webpackStatus.lastSuccessTime).toISOString() : null,
-        compileDuration: webpackStatus.compileDuration ? `${webpackStatus.compileDuration}ms` : null,
+        lastCompileTime: webpackStatus.lastCompileTime
+          ? new Date(webpackStatus.lastCompileTime).toISOString()
+          : null,
+        lastSuccessTime: webpackStatus.lastSuccessTime
+          ? new Date(webpackStatus.lastSuccessTime).toISOString()
+          : null,
+        compileDuration: webpackStatus.compileDuration
+          ? `${webpackStatus.compileDuration}ms`
+          : null,
         totalCompiles: webpackStatus.totalCompiles,
-        firstCompileTime: webpackStatus.firstCompileTime ? new Date(webpackStatus.firstCompileTime).toISOString() : null,
+        firstCompileTime: webpackStatus.firstCompileTime
+          ? new Date(webpackStatus.firstCompileTime).toISOString()
+          : null,
       },
       server: {
         nodeVersion: process.version,
@@ -101,7 +111,9 @@ function setupHealthEndpoints(devServer, healthPlugin) {
       res.status(503).json({
         ready: false,
         state: webpackStatus.state,
-        reason: webpackStatus.state === 'compiling' ? 'Compilation in progress' : 'Compilation failed',
+        reason: webpackStatus.state === 'compiling'
+          ? 'Compilation in progress'
+          : 'Compilation failed',
       });
     }
   });
@@ -121,6 +133,7 @@ function setupHealthEndpoints(devServer, healthPlugin) {
   // ====================================================================
   devServer.app.get("/health/errors", (req, res) => {
     const webpackStatus = healthPlugin.getStatus();
+
     res.json({
       errorCount: webpackStatus.errorCount,
       warningCount: webpackStatus.warningCount,
@@ -139,20 +152,26 @@ function setupHealthEndpoints(devServer, healthPlugin) {
 
     res.json({
       totalCompiles: webpackStatus.totalCompiles,
-      averageCompileTime: webpackStatus.totalCompiles > 0 ? `${Math.round(uptime / webpackStatus.totalCompiles)}ms` : null,
-      lastCompileDuration: webpackStatus.compileDuration ? `${webpackStatus.compileDuration}ms` : null,
-      firstCompileTime: webpackStatus.firstCompileTime ? new Date(webpackStatus.firstCompileTime).toISOString() : null,
+      averageCompileTime: webpackStatus.totalCompiles > 0
+        ? `${Math.round(uptime / webpackStatus.totalCompiles)}ms`
+        : null,
+      lastCompileDuration: webpackStatus.compileDuration
+        ? `${webpackStatus.compileDuration}ms`
+        : null,
+      firstCompileTime: webpackStatus.firstCompileTime
+        ? new Date(webpackStatus.firstCompileTime).toISOString()
+        : null,
       serverUptime: formatDuration(uptime),
     });
   });
 
   console.log('[Health Check] ✓ Health endpoints ready:');
-  console.log(' • GET /health - Detailed status');
-  console.log(' • GET /health/simple - Simple OK/ERROR');
-  console.log(' • GET /health/ready - Readiness check');
-  console.log(' • GET /health/live - Liveness check');
-  console.log(' • GET /health/errors - Error details');
-  console.log(' • GET /health/stats - Statistics');
+  console.log('  • GET /health         - Detailed status');
+  console.log('  • GET /health/simple  - Simple OK/ERROR');
+  console.log('  • GET /health/ready   - Readiness check');
+  console.log('  • GET /health/live    - Liveness check');
+  console.log('  • GET /health/errors  - Error details');
+  console.log('  • GET /health/stats   - Statistics');
 }
 
 // ====================================================================
