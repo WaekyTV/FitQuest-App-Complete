@@ -4,7 +4,7 @@
 class WebpackHealthPlugin {
   constructor() {
     this.status = {
-      state: 'idle', // idle, compiling, success, failed
+      state: 'idle',           // idle, compiling, success, failed
       errors: [],
       warnings: [],
       lastCompileTime: null,
@@ -23,6 +23,7 @@ class WebpackHealthPlugin {
       const now = Date.now();
       this.status.state = 'compiling';
       this.status.lastCompileTime = now;
+
       if (!this.status.firstCompileTime) {
         this.status.firstCompileTime = now;
       }
