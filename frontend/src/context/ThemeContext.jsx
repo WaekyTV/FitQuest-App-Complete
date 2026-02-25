@@ -1,1 +1,35 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'; const ThemeContext = createContext(); export const ThemeProvider = ({ children }) => { // Force Dark Mode always const [darkMode] = useState(true); useEffect(() => { // Enforce dark mode class const root = window.document.documentElement; root.classList.remove('light-mode'); root.classList.add('dark-mode'); // Clear any saved preference that might conflict localStorage.removeItem('fitquest_dark_mode'); }, []); const toggleTheme = () => { // No-op }; return ( <ThemeContext.Provider value={{ darkMode, setDarkMode: () => { }, toggleTheme }}> {children} </ThemeContext.Provider> ); }; export const useTheme = () => { const context = useContext(ThemeContext); if (context === undefined) { throw new Error('useTheme must be used within a ThemeProvider'); } return context; };
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const ThemeContext = createContext();
+
+export const ThemeProvider = ({ children }) => {
+    // Force Dark Mode always
+    const [darkMode] = useState(true);
+
+    useEffect(() => {
+        // Enforce dark mode class
+        const root = window.document.documentElement;
+        root.classList.remove('light-mode');
+        root.classList.add('dark-mode');
+        // Clear any saved preference that might conflict
+        localStorage.removeItem('fitquest_dark_mode');
+    }, []);
+
+    const toggleTheme = () => {
+        // No-op
+    };
+
+    return (
+        <ThemeContext.Provider value={{ darkMode, setDarkMode: () => { }, toggleTheme }}>
+            {children}
+        </ThemeContext.Provider>
+    );
+};
+
+export const useTheme = () => {
+    const context = useContext(ThemeContext);
+    if (context === undefined) {
+        throw new Error('useTheme must be used within a ThemeProvider');
+    }
+    return context;
+};
