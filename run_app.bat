@@ -1,1 +1,28 @@
-@echo off echo Starting Backend... cd /d "%~dp0" start "Fitquest Backend" /min cmd /k ".venv\Scripts\python.exe backend/server.py" echo Starting Frontend... cd /d "%~dp0\frontend" start "Fitquest Frontend" cmd /k "npm start" echo. echo ======================================================== echo APPLICATION LANCEE ! echo ======================================================== echo. echo 1. Sur ton PC : L'application va s'ouvrir dans le navigateur. echo. echo 2. ACCES A DISTANCE (4G / Voyage) via Tailscale : echo Sur ton telephone, ouvre Chrome/Safari et va sur : echo 👉 http://100.97.192.62.nip.io:3000 echo. echo (Assure-toi que l'app "Tailscale" est bien activee sur le tel) echo. echo ======================================================== echo. timeout /t 10 start http://100.97.192.62.nip.io:3000
+@echo off
+
+echo Starting Backend...
+cd /d "%~dp0"
+start "Fitquest Backend" /min cmd /k ".venv\Scripts\python.exe backend/server.py"
+
+echo Starting Frontend...
+cd /d "%~dp0\frontend"
+start "Fitquest Frontend" cmd /k "npm start"
+
+echo.
+echo ========================================================
+echo               APPLICATION LANCEE !
+echo ========================================================
+echo.
+echo 1. Sur ton PC : L'application va s'ouvrir dans le navigateur.
+echo.
+echo 2. ACCES A DISTANCE (4G / Voyage) via Tailscale :
+echo    Sur ton telephone, ouvre Chrome/Safari et va sur :
+echo    👉 http://100.97.192.62.nip.io:3000
+echo.
+echo    (Assure-toi que l'app "Tailscale" est bien activee sur le tel)
+echo.
+echo ========================================================
+echo.
+
+timeout /t 10
+start http://100.97.192.62.nip.io:3000
