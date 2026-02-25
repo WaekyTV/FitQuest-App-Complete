@@ -1,1 +1,104 @@
-import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react'; import { useXPSounds } from '../utils/xpSounds'; import { useAuth } from './AuthContext'; import { toast } from 'sonner'; import axios from 'axios'; const API = `${process.env.REACT_APP_BACKEND_URL}/api`; const XPContext = createContext(null); export const useXP = () => { const context = useContext(XPContext); if (!context) { throw new Error('useXP must be used within XPProvider'); } return context; }; export const XPProvider = ({ children }) => { const { user, lastSync } = useAuth(); const [xpData, setXpData] = useState(null); const { playXPGain, playLevelUp, playMegaLevelUp, playTrophyUnlock } = useXPSounds(); const fetchXPStatus = useCallback(async () => { if (!user) return null; try { const res = await axios.get(`${API}/xp/status`, { withCredentials: true }); setXpData(res.data); return res.data; } catch (err) { console.error('Error fetching XP status:', err); return null; } }, [user]); // Sync with global signal useEffect(() => { if (user) { fetchXPStatus(); } }, [user, lastSync, fetchXPStatus]); const addXP = useCallback(async (action) => { try { const res = await axios.post(`${API}/xp/add?action=${action}`, {}, { withCredentials: true }); const data = res.data; // Play appropriate sound if (data.mega_level_up) { // Every 10 levels - epic sound playMegaLevelUp(); toast.success(`🎉 NIVEAU ${data.level} ! ${data.title}`, { description: `Félicitations ! +${data.earned_xp} XP (x${data.multiplier})`, duration: 5000 }); } else if (data.level_up) { // Normal level up playLevelUp(); toast.success(`⬆️ Niveau ${data.level} !`, { description: `Tu es maintenant ${data.title} ! +${data.earned_xp} XP`, duration: 4000 }); } else { // Just XP gain playXPGain(); toast.success(`+${data.earned_xp} XP`, { description: `Total: ${data.total_xp.toLocaleString()} XP`, duration: 2000 }); } setXpData(data); return data; } catch (err) { console.error('Error adding XP:', err); return null; } }, [playXPGain, playLevelUp, playMegaLevelUp]); const unlockTrophy = useCallback((trophyName) => { playTrophyUnlock(); toast.success(`🏆 Trophée débloqué !`, { description: trophyName, duration: 4000 }); }, [playTrophyUnlock]); const xpValue = useMemo(() => ({ xpData, fetchXPStatus, addXP, unlockTrophy, playXPGain, playLevelUp, playMegaLevelUp, playTrophyUnlock }), [xpData, fetchXPStatus, addXP, unlockTrophy, playXPGain, playLevelUp, playMegaLevelUp, playTrophyUnlock]); return ( <XPContext.Provider value={xpValue}> {children} </XPContext.Provider> ); };
+import { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { useXPSounds } from '../utils/xpSounds';
+import { useAuth } from './AuthContext';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+
+const XPContext = createContext(null);
+
+export const useXP = () => {
+  const context = useContext(XPContext);
+  if (!context) {
+    throw new Error('useXP must be used within XPProvider');
+  }
+  return context;
+};
+
+export const XPProvider = ({ children }) => {
+  const { user, lastSync } = useAuth();
+  const [xpData, setXpData] = useState(null);
+  const { playXPGain, playLevelUp, playMegaLevelUp, playTrophyUnlock } = useXPSounds();
+
+  const fetchXPStatus = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const res = await axios.get(`${API}/xp/status`, { withCredentials: true });
+      setXpData(res.data);
+      return res.data;
+    } catch (err) {
+      console.error('Error fetching XP status:', err);
+      return null;
+    }
+  }, [user]);
+
+  // Sync with global signal
+  useEffect(() => {
+    if (user) {
+      fetchXPStatus();
+    }
+  }, [user, lastSync, fetchXPStatus]);
+
+  const addXP = useCallback(async (action) => {
+    try {
+      const res = await axios.post(`${API}/xp/add?action=${action}`, {}, { withCredentials: true });
+      const data = res.data;
+
+      // Play appropriate sound
+      if (data.mega_level_up) {
+        // Every 10 levels - epic sound
+        playMegaLevelUp();
+        toast.success(`🎉 NIVEAU ${data.level} ! ${data.title}`, {
+          description: `Félicitations ! +${data.earned_xp} XP (x${data.multiplier})`,
+          duration: 5000
+        });
+      } else if (data.level_up) {
+        // Normal level up
+        playLevelUp();
+        toast.success(`⬆️ Niveau ${data.level} !`, {
+          description: `Tu es maintenant ${data.title} ! +${data.earned_xp} XP`,
+          duration: 4000
+        });
+      } else {
+        // Just XP gain
+        playXPGain();
+        toast.success(`+${data.earned_xp} XP`, {
+          description: `Total: ${data.total_xp.toLocaleString()} XP`,
+          duration: 2000
+        });
+      }
+
+      setXpData(data);
+      return data;
+    } catch (err) {
+      console.error('Error adding XP:', err);
+      return null;
+    }
+  }, [playXPGain, playLevelUp, playMegaLevelUp]);
+
+  const unlockTrophy = useCallback((trophyName) => {
+    playTrophyUnlock();
+    toast.success(`🏆 Trophée débloqué !`, {
+      description: trophyName,
+      duration: 4000
+    });
+  }, [playTrophyUnlock]);
+
+  const xpValue = useMemo(() => ({
+    xpData,
+    fetchXPStatus,
+    addXP,
+    unlockTrophy,
+    playXPGain,
+    playLevelUp,
+    playMegaLevelUp,
+    playTrophyUnlock
+  }), [xpData, fetchXPStatus, addXP, unlockTrophy, playXPGain, playLevelUp, playMegaLevelUp, playTrophyUnlock]);
+
+  return (
+    <XPContext.Provider value={xpValue}>
+      {children}
+    </XPContext.Provider>
+  );
+};
