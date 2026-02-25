@@ -1,1 +1,41 @@
-from pydantic import BaseModel, Field from typing import List, Optional from datetime import datetime, timezone import uuid class Meal(BaseModel): meal_id: str = Field(default_factory=lambda: f"meal_{uuid.uuid4().hex[:12]}") user_id: str name: str meal_type: str date: str calories: int protein: int carbs: int fat: int recipe: Optional[str] = None ingredients: List[str] = [] prep_time: Optional[int] = None image_url: Optional[str] = None ai_generated: bool = False created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc)) class MealCreate(BaseModel): name: str meal_type: str date: str calories: int protein: int carbs: int fat: int recipe: Optional[str] = None ingredients: List[str] = [] prep_time: Optional[int] = None image_url: Optional[str] = None class MealGenerationRequest(BaseModel): meal_type: str calories_target: Optional[int] = None protein_target: Optional[int] = None dietary_restrictions: List[str] = [] preferences: List[str] = []
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import datetime, timezone
+import uuid
+
+class Meal(BaseModel):
+    meal_id: str = Field(default_factory=lambda: f"meal_{uuid.uuid4().hex[:12]}")
+    user_id: str
+    name: str
+    meal_type: str
+    date: str
+    calories: int
+    protein: int
+    carbs: int
+    fat: int
+    recipe: Optional[str] = None
+    ingredients: List[str] = []
+    prep_time: Optional[int] = None
+    image_url: Optional[str] = None
+    ai_generated: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class MealCreate(BaseModel):
+    name: str
+    meal_type: str
+    date: str
+    calories: int
+    protein: int
+    carbs: int
+    fat: int
+    recipe: Optional[str] = None
+    ingredients: List[str] = []
+    prep_time: Optional[int] = None
+    image_url: Optional[str] = None
+
+class MealGenerationRequest(BaseModel):
+    meal_type: str
+    calories_target: Optional[int] = None
+    protein_target: Optional[int] = None
+    dietary_restrictions: List[str] = []
+    preferences: List[str] = []
