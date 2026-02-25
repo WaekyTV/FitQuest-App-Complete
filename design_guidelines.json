@@ -1,1 +1,169 @@
-{ "design_system": { ... } }
+{
+  "design_system": {
+    "identity": {
+      "name": "FITQUEST",
+      "tone": "Cyber-Physical / Gaming / High-Performance",
+      "core_concept": "Level Up Your Life",
+      "aesthetic_style": "Modern Pixel Minimalist",
+      "target_audience": "Gamers, Fitness Enthusiasts, Data Nerds"
+    },
+    "colors": {
+      "palette": {
+        "primary": {
+          "main": "#6441a5",
+          "hover": "#7D5AB8",
+          "description": "Magic/Intelligence (AI Meals, Wisdom, XP)"
+        },
+        "accent": {
+          "main": "#B0E301",
+          "hover": "#C5F22B",
+          "glow": "rgba(176, 227, 1, 0.4)",
+          "description": "Energy/Action (Workouts, Active States, Success)"
+        },
+        "background": {
+          "default": "#050505",
+          "paper": "#0A0A0A",
+          "subtle": "#121212",
+          "grid_line": "rgba(255, 255, 255, 0.03)"
+        },
+        "text": {
+          "primary": "#FFFFFF",
+          "secondary": "#A1A1AA",
+          "muted": "#52525B"
+        },
+        "semantic": {
+          "success": "#B0E301",
+          "warning": "#FFD600",
+          "error": "#FF3333",
+          "info": "#6441a5"
+        }
+      },
+      "rules": [
+        "NEVER use gradients for backgrounds. Use solid dark colors with noise/grain.",
+        "Use the 'Green Energy' (#B0E301) for primary CTAs and active states.",
+        "Use 'Purple' (#6441a5) for AI features and secondary accents.",
+        "Text over images must use a hard drop-shadow or heavy scrim."
+      ]
+    },
+    "typography": {
+      "headings": {
+        "font_family": "Rajdhani, sans-serif",
+        "weights": ["600", "700"],
+        "style": "Uppercase, slightly wider tracking",
+        "description": "Tech/Gaming feel without being illegible"
+      },
+      "body": {
+        "font_family": "Outfit, sans-serif",
+        "weights": ["300", "400", "500"],
+        "description": "Geometric modern sans, readable but distinct"
+      },
+      "mono": {
+        "font_family": "JetBrains Mono, monospace",
+        "description": "For stats, numbers, and data displays"
+      },
+      "scale": {
+        "h1": "text-5xl md:text-7xl font-bold uppercase tracking-tight",
+        "h2": "text-3xl md:text-5xl font-bold uppercase tracking-tight",
+        "h3": "text-xl md:text-2xl font-semibold uppercase tracking-wide",
+        "body": "text-base leading-relaxed"
+      }
+    },
+    "layout": {
+      "grid_system": "Bento Grid (CSS Grid)",
+      "spacing": {
+        "container_padding": "p-4 md:p-8 lg:p-12",
+        "section_gap": "gap-6 md:gap-8",
+        "item_gap": "gap-4"
+      },
+      "containers": {
+        "card": "bg-[#0A0A0A] border border-white/10 relative overflow-hidden",
+        "glass": "bg-black/60 backdrop-blur-xl border border-white/5",
+        "hud_panel": "border-l-2 border-[#B0E301] bg-gradient-to-r from-[#B0E301]/5 to-transparent"
+      }
+    },
+    "visual_enhancers": {
+      "borders": "1px solid rgba(255,255,255,0.1)",
+      "shadows": {
+        "neon_green": "0 0 15px rgba(176, 227, 1, 0.3)",
+        "neon_purple": "0 0 15px rgba(100, 65, 165, 0.3)",
+        "hard": "4px 4px 0px 0px rgba(0,0,0,1)"
+      },
+      "textures": [
+        "Scanlines: repeating-linear-gradient(0deg, transparent, transparent 2px, #000 3px)",
+        "Grid Background: radial-gradient(circle, #333 1px, transparent 1px) bg-size: 20px 20px"
+      ],
+      "effects": [
+        "Clip-path corners for 'Tech' feel",
+        "Glitch effect on hover for major headings"
+      ]
+    },
+    "components": {
+      "buttons": {
+        "primary": "bg-[#B0E301] text-black font-bold uppercase tracking-wider hover:bg-[#C5F22B] hover:shadow-[0_0_20px_rgba(176,227,1,0.4)] transition-all active:translate-y-1 rounded-sm",
+        "secondary": "border border-[#6441a5] text-white hover:bg-[#6441a5]/20 uppercase tracking-wider rounded-sm",
+        "ghost": "text-[#A1A1AA] hover:text-white hover:bg-white/5"
+      },
+      "cards": {
+        "stat": "bg-[#0F0F0F] border border-white/5 p-6 hover:border-[#B0E301]/50 transition-colors group relative",
+        "workout": "bg-[#0F0F0F] border-l-4 border-[#B0E301] p-4",
+        "meal": "bg-[#0F0F0F] border-l-4 border-[#6441a5] p-4"
+      },
+      "inputs": {
+        "default": "bg-black border border-white/10 focus:border-[#B0E301] focus:ring-1 focus:ring-[#B0E301] rounded-sm text-white placeholder:text-gray-600"
+      },
+      "navigation": {
+        "sidebar": "fixed left-0 h-full bg-[#050505] border-r border-white/10 w-64 transform transition-transform z-50",
+        "mobile_menu": "fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex flex-col items-center justify-center gap-8"
+      }
+    },
+    "motion": {
+      "rules": [
+        "No bouncy springs. Use snappy, linear or slight ease-out curves.",
+        "Hover states should be instant or very fast (100ms).",
+        "Page transitions: Slide up or Glitch in."
+      ],
+      "classes": {
+        "hover_lift": "hover:-translate-y-1 transition-transform duration-200 ease-out",
+        "press": "active:scale-95 duration-75",
+        "fade_in": "animate-in fade-in zoom-in-95 duration-300"
+      }
+    },
+    "assets": {
+      "icons": {
+        "library": "lucide-react",
+        "style": "Stroke width 1.5 or 2. Sharp edges preferred.",
+        "custom": "Use pixel-art SVGs for badges or achievements if possible."
+      },
+      "images": {
+        "gym_atmosphere": [
+          "https://images.unsplash.com/photo-1709315969349-1a43dea3efdc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHw0fHxmaXRuZXNzJTIwZ3ltJTIwd29ya291dCUyMGRhcmslMjBsaWdodGluZyUyMG5lb258ZW58MHx8fHwxNzcxMDc1OTY4fDA&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1740895307943-7878df384db1?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTZ8MHwxfHNlYXJjaHwyfHxmaXRuZXNzJTIwZ3ltJTIwd29ya291dCUyMGRhcmslMjBsaWdodGluZyUyMG5lb258ZW58MHx8fHwxNzcxMDc1OTY4fDA&ixlib=rb-4.1.0&q=85"
+        ],
+        "food": [
+          "https://images.unsplash.com/photo-1611102130252-6ba137b7c478?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwzfHxoZWFsdGh5JTIwbWVhbCUyMHByZXAlMjBmb29kJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzcxMDc1OTY5fDA&ixlib=rb-4.1.0&q=85",
+          "https://images.unsplash.com/photo-1720983197848-39f51a5e4544?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHwyfHxoZWFsdGh5JTIwbWVhbCUyMHByZXAlMjBmb29kJTIwZGFyayUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzcxMDc1OTY5fDA&ixlib=rb-4.1.0&q=85"
+        ]
+      }
+    },
+    "instructions_to_main_agent": [
+      "1. FONT SETUP: Install 'Rajdhani' and 'Outfit' from Google Fonts immediately in index.css.",
+      "2. THEME ENFORCEMENT: Update tailwind.config.js to use the specific colors provided (#B0E301, #6441a5, #050505).",
+      "3. LAYOUT: Build the 'Home' dashboard as a BENTO GRID. Stats at top, Workouts left, Meals right.",
+      "4. GAMIFICATION: Add a 'Level/XP' bar in the sidebar or header. Use purple for the progress fill.",
+      "5. PIXEL TOUCH: Use a pixel-font for the 'FITQUEST' logo text if not using an image.",
+      "6. MOBILE: Ensure the sidebar transforms into a slide-over menu on mobile. Use Shadcn Sheet or custom.",
+      "7. CHARTS: Use Recharts for performance. Style axes to be invisible or very subtle. Lines should be Neon Green.",
+      "8. MEAL GEN: Make this section look like a 'Laboratory'. Use Purple accents and glass cards.",
+      "9. TESTID: Add data-testid to all interactive elements."
+    ]
+  },
+  "universal_guidelines": {
+    "do_not_use": [
+      "Gradients on text (unless for very specific 'Magic' effects)",
+      "Rounded-xl or Rounded-2xl (stick to Rounded-md or Rounded-sm for the tech feel)",
+      "Default Blue/Slate colors from Tailwind"
+    ],
+    "accessibility": "Ensure text on the neon green is BLACK, not white. Text on purple can be White.",
+    "testing": "All interactive elements must have data-testid attributes."
+  }
+}
