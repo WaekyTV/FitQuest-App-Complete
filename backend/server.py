@@ -28,7 +28,7 @@ db = client[os.environ['DB_NAME']]
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Lifespan context manager
 @asynccontextmanager
@@ -89,6 +89,29 @@ class User(BaseModel):
     chrono_beep_last_ten: bool = True
     chrono_beep_last_three: bool = True
     chrono_volume: float = 0.7
+    nutritional_program_text: Optional[str] = None
+    # Onboarding fields
+    main_goal: Optional[str] = None
+    secondary_goals: Optional[List[str]] = None
+    calorie_experience: Optional[str] = None
+    knows_intermittent_fasting: Optional[bool] = None
+    wants_intermittent_fasting: Optional[bool] = None
+    target_weeks: Optional[int] = None
+    weekly_weight_loss: Optional[float] = None
+    meals_per_day: Optional[int] = 4
+    meal_times: Optional[dict] = None
+    eating_location: Optional[str] = None
+    diet_preference: Optional[str] = None
+    dietary_restrictions: Optional[List[str]] = None
+    habits_to_change: Optional[List[str]] = None
+    onboarding_completed: bool = False
+    onboarding_date: Optional[str] = None
+    steps_target: Optional[int] = None
+    hydration_target: Optional[int] = None
+    caloric_deficit_kcal: Optional[int] = None
+    gender: Optional[str] = None
+    activity_level: Optional[str] = None
+    is_cutting: bool = False
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -135,6 +158,33 @@ class UserUpdate(BaseModel):
     chrono_beep_last_ten: Optional[bool] = None
     chrono_beep_last_three: Optional[bool] = None
     chrono_volume: Optional[float] = None
+    caloric_deficit_kcal: Optional[int] = None
+    nutritional_program_text: Optional[str] = None
+    is_cutting: Optional[bool] = None
+
+
+class MealPreferences(BaseModel):
+    num_people: Optional[int] = 1
+    allow_meat_fish: Optional[bool] = True
+    prefer_powdered_protein: Optional[bool] = False
+
+
+class MealGenerationRequest(BaseModel):
+    meal_type: str  # petit_dejeuner | dejeuner | collation | diner
+    calories_target: Optional[int] = None
+    protein_target: Optional[int] = None
+    dietary_restrictions: Optional[List[str]] = None
+    preferences: Optional[List[str]] = None
+    # FITQUEST enriched fields
+    planning_context: Optional[dict] = None       # {shift_type, workout_type, date}
+    protein_bonus: Optional[int] = 0             # extra grams of protein for this day
+    calorie_bonus: Optional[int] = 0             # extra kcal for this day
+    liked_meal_ids: Optional[List[str]] = None   # IDs of previously liked meals
+    num_people: Optional[int] = 1                # number of people for this recipe
+    allow_meat_fish: Optional[bool] = None       # None = use user preference
+    prefer_powdered_protein: Optional[bool] = None  # None = use user preference
+    force_liked_style: Optional[bool] = False    # True = generate similar to liked
+    date: Optional[str] = None                   # Specific date for the meal
 
 
 # ============== AUTH & USER DEPENDENCY ==============
@@ -489,14 +539,16 @@ class MealCreate(BaseModel):
     recipe: Optional[str] = None
     ingredients: List[str] = []
     prep_time: Optional[int] = None
+    cook_time: Optional[int] = None
     image_url: Optional[str] = None
+    description: Optional[str] = None
+    ma_portion: Optional[str] = None
+    conseils_reutilisation: Optional[str] = None
+    notes: Optional[str] = None
+    num_people: Optional[int] = 1
+    country_of_origin: Optional[str] = None
+    ai_generated: Optional[bool] = False
 
-class MealGenerationRequest(BaseModel):
-    meal_type: str
-    calories_target: Optional[int] = None
-    protein_target: Optional[int] = None
-    dietary_restrictions: List[str] = []
-    preferences: List[str] = []
 
 class PerformanceRecord(BaseModel):
     record_id: str = Field(default_factory=lambda: f"rec_{uuid.uuid4().hex[:12]}")
@@ -689,8 +741,20 @@ async def update_user(update: UserUpdate, user: User = Depends(get_current_user)
             goal=goal,
             activity_level=activity_level
         )
-        update_data['daily_calories'] = nutrition['daily_calories']
-        update_data['target_protein'] = nutrition['target_protein']
+        # Only overwrite if not explicitly provided (e.g. from onboarding)
+        if 'daily_calories' not in update_data:
+            update_data['daily_calories'] = nutrition['daily_calories']
+        if 'target_protein' not in update_data:
+            update_data['target_protein'] = nutrition['target_protein']
+            
+        # Recalculate target_weeks if weight or target_weight changes
+        if 'weight' in update_data or 'target_weight' in update_data:
+            curr_w = update_data.get('weight', merged.get('weight'))
+            targ_w = update_data.get('target_weight', merged.get('target_weight'))
+            rate = merged.get('weekly_weight_loss', 0.5)
+            if curr_w and targ_w and rate > 0:
+                diff = abs(curr_w - targ_w)
+                update_data['target_weeks'] = int(diff / rate) if diff > 0 else 0
     
     if update_data:
         await db.users.update_one(
@@ -939,10 +1003,82 @@ async def delete_meal(meal_id: str, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Meal not found")
     return {"message": "Meal deleted"}
 
+@api_router.post("/meals/{meal_id}/favorite")
+async def toggle_meal_favorite(meal_id: str, user: User = Depends(get_current_user)):
+    """Bascule le statut favori d'un repas (champ 'liked': bool)."""
+    meal = await db.meals.find_one({"meal_id": meal_id, "user_id": user.user_id}, {"_id": 0, "liked": 1})
+    if not meal:
+        raise HTTPException(status_code=404, detail="Repas non trouvé")
+    new_liked = not meal.get("liked", False)
+    await db.meals.update_one(
+        {"meal_id": meal_id, "user_id": user.user_id},
+        {"$set": {"liked": new_liked}}
+    )
+    return {"meal_id": meal_id, "liked": new_liked}
+
+@api_router.post("/meals/{meal_id}/like")
+async def like_meal(meal_id: str, user: User = Depends(get_current_user)):
+    """Marque un repas comme aimé — il devient référence pour les prochaines générations."""
+    meal = await db.meals.find_one({"meal_id": meal_id, "user_id": user.user_id}, {"_id": 0})
+    if not meal:
+        raise HTTPException(status_code=404, detail="Repas non trouvé")
+    # Store as liked reference in user profile
+    liked_ref = {"name": meal.get("name"), "description": meal.get("description"), "meal_type": meal.get("meal_type")}
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"liked_meal": liked_ref, f"liked_meal_{meal.get('meal_type')}": liked_ref}}
+    )
+    # Also mark the meal itself as liked in DB
+    await db.meals.update_one(
+        {"meal_id": meal_id, "user_id": user.user_id},
+        {"$set": {"liked": True, "disliked": False}}
+    )
+    return {"meal_id": meal_id, "liked": True, "message": "Repas aimé ! Il servira d'inspiration pour la prochaine génération."}
+
+
+@api_router.post("/meals/{meal_id}/dislike")
+async def dislike_meal(meal_id: str, user: User = Depends(get_current_user)):
+    """Marque un repas comme non aimé — il sera exclu des futures générations."""
+    meal = await db.meals.find_one({"meal_id": meal_id, "user_id": user.user_id}, {"_id": 0})
+    if not meal:
+        raise HTTPException(status_code=404, detail="Repas non trouvé")
+    meal_name = meal.get("name", "")
+    # Add to disliked_meals list (guard against duplicates, max 50)
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0, "disliked_meals": 1})
+    disliked = user_doc.get("disliked_meals", []) if user_doc else []
+    if meal_name not in disliked:
+        disliked.append(meal_name)
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"disliked_meals": disliked[-50:]}}
+    )
+    # Mark meal as disliked
+    await db.meals.update_one(
+        {"meal_id": meal_id, "user_id": user.user_id},
+        {"$set": {"liked": False, "disliked": True}}
+    )
+    return {"meal_id": meal_id, "disliked": True, "blacklisted_name": meal_name, "message": "Repas exclu des prochaines générations."}
+
+
+@api_router.patch("/users/meal-preferences")
+async def update_meal_preferences(prefs: MealPreferences, user: User = Depends(get_current_user)):
+    """Sauvegarde les préférences de génération de repas (nb personnes, viande, Whey)."""
+    update = {k: v for k, v in prefs.model_dump().items() if v is not None}
+    if update:
+        await db.users.update_one(
+            {"user_id": user.user_id},
+            {"$set": update}
+        )
+    return {"message": "Préférences sauvegardées", **update}
+
+
+
 @api_router.post("/meals/generate")
 async def generate_meal(request: MealGenerationRequest, user: User = Depends(get_current_user)):
+
+
     """Generate a meal using Emergent LLM (Gemini) adapted to user's goals."""
-    if not EMERGENT_LLM_KEY:
+    if not GEMINI_API_KEY:
         raise HTTPException(status_code=500, detail="LLM API not configured")
     
     try:
@@ -955,29 +1091,10 @@ async def generate_meal(request: MealGenerationRequest, user: User = Depends(get
         daily_calories = user_data.get('daily_calories', 2000)
         target_protein = user_data.get('target_protein', 120)
         
-        # Calculate meal-specific targets based on meal type
-        meal_calorie_ratios = {
-            "petit_dejeuner": 0.25,
-            "dejeuner": 0.35,
-            "collation": 0.10,
-            "diner": 0.30
-        }
-        
-        meal_ratio = meal_calorie_ratios.get(request.meal_type, 0.25)
-        target_meal_calories = int(daily_calories * meal_ratio)
-        target_meal_protein = int(target_protein * meal_ratio)
         
         # Goal-specific instructions
-        goal_instructions = {
-            "weight_loss": "Le repas doit être FAIBLE EN CALORIES mais rassasiant, riche en fibres, légumes et protéines maigres. Éviter les glucides simples et les graisses saturées.",
-            "muscle_gain": "Le repas doit être RICHE EN PROTÉINES de qualité (viande, poisson, oeufs, légumineuses) et en glucides complexes pour favoriser la prise de masse musculaire.",
-            "maintenance": "Le repas doit être équilibré avec un bon ratio protéines/glucides/lipides pour maintenir le poids actuel.",
-            "endurance": "Le repas doit être RICHE EN GLUCIDES COMPLEXES pour l'énergie et contenir des protéines modérées pour la récupération."
-        }
-        
-        goal_instruction = goal_instructions.get(goal, goal_instructions["maintenance"])
-        
         meal_type_fr = {
+
             "petit_dejeuner": "petit-déjeuner",
             "dejeuner": "déjeuner",
             "collation": "collation",
@@ -991,50 +1108,237 @@ async def generate_meal(request: MealGenerationRequest, user: User = Depends(get
             "endurance": "ENDURANCE"
         }.get(goal, "MAINTIEN")
         
-        prompt = f"""Tu es un nutritionniste expert. Génère un repas délicieux et adapté en français pour un {meal_type_fr}.
+        # ═══════════════════════════════════════════════════════════
+        # RICH FITQUEST-STYLE PROMPT CONSTRUCTION
+        # ═══════════════════════════════════════════════════════════
 
-🎯 OBJECTIF PRINCIPAL: {goal_fr}
-{goal_instruction}
+        # Gather all user data from onboarding
+        height = user_data.get('height', 175)
+        weight = user_data.get('weight', 75)
+        age = user_data.get('age', 30)
+        sex = user_data.get('sex', 'homme')
+        target_weight = user_data.get('target_weight', weight)
 
-📊 OBJECTIFS NUTRITIONNELS POUR CE REPAS:
-- Calories: EXACTEMENT autour de {target_meal_calories} kcal (±50)
-- Protéines: EXACTEMENT autour de {target_meal_protein}g (±5)
-- Restrictions: {', '.join(request.dietary_restrictions) if request.dietary_restrictions else 'aucune'}
-- Préférences: {', '.join(request.preferences) if request.preferences else 'aucune'}
+        # User meal preferences (saved globally)
+        allow_meat_fish = request.allow_meat_fish if request.allow_meat_fish is not None else user_data.get('allow_meat_fish', True)
+        prefer_powdered_protein = request.prefer_powdered_protein if request.prefer_powdered_protein is not None else user_data.get('prefer_powdered_protein', False)
+        num_people = request.num_people or user_data.get('num_people', 1)
+        # Force 1 person for breakfast and snacks
+        if request.meal_type in ('petit_dejeuner', 'collation'):
+            num_people = 1
 
-Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans ```) avec cette structure:
-{{
-  "name": "Nom appétissant du plat",
-  "description": "Description courte et appétissante",
-  "calories": {target_meal_calories},
-  "protein": {target_meal_protein},
-  "carbs": nombre,
-  "fat": nombre,
-  "prep_time": nombre en minutes,
-  "ingredients": ["ingrédient 1 avec quantité", "ingrédient 2"],
-  "recipe": "Étapes de préparation détaillées",
-  "image_search": "mots clés anglais pour image (ex: grilled salmon vegetables)"
-}}"""
+        # IMC
+        imc = weight / ((height / 100) ** 2) if height > 0 else 22.0
+        if imc < 18.5: imc_cat = "insuffisance pondérale"
+        elif imc < 25: imc_cat = "poids normal"
+        elif imc < 30: imc_cat = "surpoids"
+        else: imc_cat = "obésité"
+
+        # Protein needs (g/kg)
+        protein_multiplier = 2.0 if goal in ('muscle_gain',) else 1.6
+        protein_needs = round(weight * protein_multiplier)
+
+        # Planning context from request
+        planning = request.planning_context or {}
+        shift_type = planning.get('shift_type', 'repos')
+        workout_type = planning.get('workout_type', 'aucun')
+
+        shift_labels = {
+            '6h-18h': 'Travail de Jour (6H-18H)',
+            '7h-18h': 'Travail de Jour (7H-18H)',
+            '18h-6h': 'Travail de Nuit (18H-6H)',
+            'repos': 'Jour de Repos',
+            'repos_sport': 'Repos avec Sport Dédié',
+        }
+        workout_labels = {
+            'renforcement': 'Renforcement Musculaire',
+            'cardio': 'Cardio',
+            'hiit': 'HIIT',
+            'repos_actif': 'Repos Actif / Étirements',
+            'aucun': 'Aucun sport ce jour',
+            'repos': 'Repos complet',
+        }
+        shift_label = shift_labels.get(shift_type, shift_type)
+        workout_label = workout_labels.get(workout_type, workout_type)
+
+        # Onboarding enrichment
+        secondary_goals = user_data.get('secondary_goals', [])
+        habits_to_change = user_data.get('habits_to_change', [])
+        dietary_restrictions = user_data.get('dietary_restrictions', [])
+        eating_location = user_data.get('eating_location', 'domicile')
+        diet_preference = user_data.get('diet_preference', 'omnivore')
+        wants_if = user_data.get('wants_intermittent_fasting', False)
+        is_cutting = user_data.get('is_cutting', False)
+    
+        # Sleep routine context logic
+        sleep_impact = ""
+        if shift_type == '18h-6h':
+            sleep_impact = "COMPOSANTE SOMMEIL : L'utilisateur travaille de nuit. Favoriser des aliments facilitant le sommeil après le poste (magnésium, tryptophane) et éviter les excitants en fin de service."
+        elif shift_type in ('6h-18h', '7h-18h'):
+            sleep_impact = "COMPOSANTE SOMMEIL : Poste de jour long. Assurer un dîner qui favorise une endormissement rapide pour garantir 7-8h de repos avant le réveil matinal."
+        else:
+            sleep_impact = "COMPOSANTE SOMMEIL : Journée avec rythme régulier. Favoriser la régularité des cycles circadiens."
+
+        # Calorie needs from planning
+        daily_cal_needs_map = {
+            '6h-18h':     {'base': 2500, 'mods': {'renforcement': 300, 'cardio': 200, 'hiit': 400, 'repos_actif': 100, 'aucun': 0}},
+            '7h-18h':     {'base': 2500, 'mods': {'renforcement': 300, 'cardio': 200, 'hiit': 400, 'repos_actif': 100, 'aucun': 0}},
+            '18h-6h':     {'base': 2200, 'mods': {'renforcement': 300, 'cardio': 200, 'hiit': 400, 'repos_actif': 100, 'aucun': 0}},
+            'repos':      {'base': 2000, 'mods': {'renforcement': 300, 'cardio': 200, 'hiit': 400, 'repos_actif': 100, 'aucun': 0}},
+            'repos_sport':{'base': 2800, 'mods': {}},
+        }
+        cal_needs = daily_cal_needs_map.get(shift_type, {'base': 2200, 'mods': {}})
+        planning_daily_cal = cal_needs['base'] + cal_needs['mods'].get(workout_type, 0)
+        # Override with user's calculated target if available
+        effective_daily_cal = max(daily_calories, planning_daily_cal) if planning else daily_calories
+
+        # Target calculations
+        extra_protein = getattr(request, 'protein_bonus', 0) or 0
+        extra_cal = getattr(request, 'calorie_bonus', 0) or 0
+        meal_ratio = {'petit_dejeuner': 0.25, 'dejeuner': 0.35, 'collation': 0.10, 'diner': 0.30}.get(request.meal_type, 0.25)
+        target_meal_calories = int((effective_daily_cal + extra_cal) * meal_ratio)
+        target_meal_protein = int(((target_protein or protein_needs) + extra_protein) * meal_ratio)
+        if is_cutting:
+            prompt += "\n- L'utilisateur est en phase de SÈCHE (cutting). Privilégie une densité calorique faible mais un volume alimentaire élevé pour la satiété. Ratio de protéines élevé."
         
-        # --- NOUVEAU CODE GEMINI ---
+        # User nutritional info
+        if is_cutting:
+            prompt += "\n- L'utilisateur souhaite réaliser une SÈCHE de précision. Optimise les horaires de repas pour maximiser la satiété (intermittent fasting si activé) et suggère des ajustements mineurs sur le mouvement quotidien."
+        
+        nutritional_program = user_data.get('nutritional_program_text') or """
+        - Rôle: Gérard Chanot (Waeky), agent de sécurité.
+        - Condition: Sclérose en plaques rémittente progressive bien gérée.
+        - Horaires: Postes de 12h (6h-18h, 18h-6h, 7h-18h).
+        - Objectifs: Maintien de l'énergie, récupération musculaire, gestion de la fatigue.
+        """
+
+        # Constraints restoration
+        meal_context_desc = {
+            "petit_dejeuner": "PETIT-DÉJEUNER",
+            "dejeuner": "DÉJEUNER",
+            "collation": "COLLATION",
+            "diner": "DÎNER"
+        }.get(request.meal_type, request.meal_type).upper()
+
+        sport_impact = "CE JOUR INCLUT UNE SÉANCE DE SPORT. LE REPAS DOIT SOUTENIR LA PERFORMANCE OU LA RÉCUPÉRATION." if workout_type != 'aucun' else "CE JOUR N'INCLUT PAS DE SÉANCE DE SPORT. LE REPAS DOIT ÊTRE ÉQUILIBRÉ POUR UN JOUR MOINS ACTIF."
+        
+        poste_impact = ""
+        if shift_type == '18h-6h': poste_impact = "C'EST UN POSTE DE NUIT. L'ALIMENTATION DOIT ÊTRE ADAPTÉE POUR MAINTENIR L'ÉNERGIE ET LA VIGILANCE PENDANT LA NUIT, ET FAVORISER LE REPOS EN JOURNÉE."
+        elif 'jour' in shift_label.lower(): poste_impact = "C'EST UN POSTE DE JOUR. L'ALIMENTATION DOIT APPORTER UNE ÉNERGIE DURABLE POUR LA JOURNÉE."
+        elif 'repos' in shift_label.lower(): poste_impact = "C'EST UN JOUR DE REPOS. L'ALIMENTATION DOIT FAVORISER LA RÉCUPÉRATION ET LE MAINTIEN."
+
+        specific_constraints = []
+        if not allow_meat_fish:
+            specific_constraints.append("EXCLURE STRICTEMENT TOUTE VIANDE (ROUGE OU BLANCHE) ET POISSON. PRIVILÉGIER LES PROTÉINES VÉGÉTALES (LÉGUMINEUSES, TOFU, TEMPEH, ŒUFS, LAITAGES).")
+        else:
+            specific_constraints.append("TRÈS GRANDE DIVERSITÉ DE SOURCES : VIANDE, POISSON, ŒUFS, LÉGUMINEUSES, TOFU. NE PAS SE LIMITER À LA VIANDE.")
+
+        if request.meal_type == 'petit_dejeuner':
+            specific_constraints.extend([
+                "DOIT ÊTRE UN PETIT-DÉJEUNER COHÉRENT ET RÉALISTE. AUCUNE COMBINAISON ABSURDE.",
+                "DOIT ÊTRE SUCRÉ, EN ÉVITANT LES SAVEURS SALÉES (SAUF ŒUFS DANS CRÊPES/PANCAKES).",
+                "PAS DE PÂTES, SEMOULE OU SAUCE TOMATE.",
+                "TRÈS GRANDE VARIÉTÉ : TARTINES, THÉ, PORRIDGE (occasionnel), SHAKE, FRUITS, YAOURTS, PANCAKES."
+            ])
+        elif 'collation' in request.meal_type:
+            specific_constraints.extend([
+                "DOIT ÊTRE UNE COLLATION LÉGÈRE ET ÉNERGISANTE. PAS UN REPAS COMPLET.",
+                "FACILE À TRANSPORTER. EX: FRUITS, YAOURTS, SHAKES, AMANDES, BARRES MAISON."
+            ])
+        elif request.meal_type in ('dejeuner', 'diner'):
+            specific_constraints.extend([
+                "REPAS COMPLET : PROTÉINES + GLUCIDES + LÉGUMES.",
+                "GRANDE VARIÉTÉ : SALADES, GALETTES, WRAPS, BURGERS ÉQUILIBRÉS, PÂTES COMPLÈTES, RIZ, QUINOA.",
+                "INSTRUCTIONS DE CUISSON EXTRÊMEMENT DÉTAILLÉES (températures, temps, techniques)."
+            ])
+
+        if prefer_powdered_protein:
+            specific_constraints.append("AUGMENTER LA FRÉQUENCE DES PROPOSITIONS CONTENANT DES PROTÉINES EN POUDRE (WHEY).")
+        
+        # New constraints from onboarding
+        if secondary_goals:
+            specific_constraints.append(f"OBJECTIFS SECONDAIRES : {', '.join(secondary_goals)}. Adapter les nutriments (ex: plus de magnésium pour la fatigue, omega-3 pour le cerveau).")
+        if habits_to_change:
+            specific_constraints.append(f"HABITUDES À AMÉLIORER : {', '.join(habits_to_change)}. Proposer des alternatives saines à ces habitudes.")
+        if dietary_restrictions:
+            specific_constraints.append(f"RESTRICTIONS ALIMENTAIRES STRICTES : {', '.join(dietary_restrictions)}. NE JAMAIS UTILISER CES INGRÉDIENTS.")
+        if eating_location == 'bureau':
+            specific_constraints.append("LIEU DE REPAS : BUREAU. La recette doit être facilement transportable, froide ou réchauffable au micro-ondes, et rapide à manger.")
+        if wants_if:
+            specific_constraints.append("L'utilisateur pratique le JEÛNE INTERMITTENT. Le repas doit être dense nutritionnellement pour couvrir les besoins sur une fenêtre réduite.")
+        
+        specific_constraints.append(f"PRÉFÉRENCE ALIMENTAIRE : {diet_preference}.")
+        specific_constraints.append("L'ESTIMATION DES CALORIES DANS 'calories' DOIT TOUJOURS ÊTRE UNIQUEMENT POUR 1 PERSONNE.")
+
+        prompt = f"""
+        Génère une recette de repas pour {num_people} personne(s) au format JSON.
+        Le repas est de type : "{request.meal_type}".
+        Le contexte du jour est : "{shift_label} + {workout_label}".
+        Profil utilisateur : Taille: {height}cm, Poids: {weight}kg, IMC: {imc:.1f} ({imc_cat}), Besoins en protéines: {protein_needs}g/jour.
+        {sport_impact}
+        {poste_impact}
+        {sleep_impact}
+
+        PROGRAMME NUTRITIONNEL À RESPECTER :
+        {nutritional_program}
+
+        CONTRAINTES SPÉCIFIQUES :
+        {chr(10).join(f"- {c}" for c in specific_constraints)}
+
+        Format de sortie JSON attendu:
+        {{
+          "name": "TITRE DU PLAT",
+          "description": "DESCRIPTION DÉTAILLÉE DU PLAT.",
+          "country_of_origin": "PAYS OU RÉGION D'ORIGINE",
+          "calories": {target_meal_calories},
+          "protein": {target_meal_protein},
+          "carbs": nombre_glucides,
+          "fat": nombre_lipides,
+          "prep_time": minutes,
+          "cook_time": minutes,
+          "num_people": {num_people},
+          "ingredients": ["QUANTITÉ UNITÉ INGRÉDIENT"],
+          "ma_portion": "VOTRE PORTION INDIVIDUELLE (POUR 1 PERSONNE)",
+          "recipe": "ÉTAPES EXTRÊMEMENT DÉTAILLÉES (températures, temps exacts)...",
+          "conseils_reutilisation": "ASTUCE ÉCONOMIE OU RESTES",
+          "notes": "INFORMATIONS NUTRITIONNELLES",
+          "image_search": "english keywords for photo search"
+        }}
+        """
+        
+        # --- GEMINI ---
         try:
-            # On envoie la demande au modèle défini tout en haut
-            gemini_response = model.generate_content(prompt)
-            response_text = gemini_response.text
-            
-            # On nettoie le texte pour enlever les balises ```json
+            # Try primary model first (2.0 Flash)
+            try:
+                model_2_0 = genai.GenerativeModel('gemini-2.0-flash')
+                gemini_response = model_2_0.generate_content(prompt)
+                response_text = gemini_response.text
+            except Exception as e:
+                err_str = str(e)
+                # If quota error, try fallback model (2.5 Flash)
+                if "429" in err_str or "quota" in err_str.lower():
+                    logger.info("Quota Gemini 2.0 atteint, tentative avec Gemini 2.5 Flash...")
+                    model_fallback = genai.GenerativeModel('gemini-2.5-flash')
+                    gemini_response = model_fallback.generate_content(prompt)
+                    response_text = gemini_response.text
+                else:
+                    raise e
+
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0]
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].split("```")[0]
-            
-            # On convertit le texte en données utilisables
             meal_data = json.loads(response_text)
-            
         except Exception as e:
+            err_str = str(e)
+            if "429" in err_str or "quota" in err_str.lower():
+                raise HTTPException(
+                    status_code=429, 
+                    detail="⏳ Quota Gemini (2.0 & 2.5) épuisé. La version gratuite est limitée. Réessaie dans quelques minutes ou demain."
+                )
             logger.error(f"Erreur Gemini: {e}")
             raise HTTPException(status_code=500, detail="Erreur lors de la génération du repas")
-        # ---------------------------
+        # ---------------
         
         # Get image from Unsplash
         image_url = None
@@ -1069,18 +1373,27 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans ```) avec cette str
             "user_id": user.user_id,
             "name": meal_data["name"],
             "description": meal_data.get("description", ""),
+            "country_of_origin": meal_data.get("country_of_origin", ""),
             "meal_type": request.meal_type,
-            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            "calories": meal_data["calories"],
-            "protein": meal_data["protein"],
-            "carbs": meal_data["carbs"],
-            "fat": meal_data["fat"],
+            "date": request.date or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "calories": meal_data.get("calories", target_meal_calories),
+            "protein": meal_data.get("protein", target_meal_protein),
+            "carbs": meal_data.get("carbs", 0),
+            "fat": meal_data.get("fat", 0),
             "recipe": meal_data.get("recipe", ""),
             "ingredients": meal_data.get("ingredients", []),
+            "ma_portion": meal_data.get("ma_portion", ""),
+            "conseils_reutilisation": meal_data.get("conseils_reutilisation", ""),
+            "notes": meal_data.get("notes", ""),
             "prep_time": meal_data.get("prep_time"),
+            "cook_time": meal_data.get("cook_time"),
+            "num_people": meal_data.get("num_people", num_people),
             "image_url": image_url,
             "ai_generated": True,
+            "liked": False,
+            "disliked": False,
             "goal": goal,
+            "planning_context": request.planning_context,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
@@ -1091,9 +1404,12 @@ Réponds UNIQUEMENT avec un JSON valide (sans markdown, sans ```) avec cette str
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error: {e}, response: {response_text}")
         raise HTTPException(status_code=500, detail="Failed to parse AI response")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Meal generation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        import traceback
+        logger.error(f"Meal generation error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Erreur interne: {str(e)}")
 
 # ============== PERFORMANCE ROUTES ==============
 
@@ -2577,12 +2893,128 @@ async def update_challenge_progress(challenge_id: str, progress: int, user: User
 # ============== NUTRITION SCORE SYSTEM ==============
 
 NUTRITION_BADGES = [
-    {"id": "first_balanced", "name": "Premier Équilibre", "description": "Premier repas équilibré", "threshold": 1, "xp": 50, "icon": "🥗", "color": "#B0E301"},
-    {"id": "protein_week", "name": "Roi des Protéines", "description": "Objectif protéines atteint 7 jours", "threshold": 7, "xp": 200, "icon": "💪", "color": "#FF6B35"},
-    {"id": "balanced_10", "name": "Équilibriste", "description": "10 repas équilibrés", "threshold": 10, "xp": 300, "icon": "⚖️", "color": "#6441a5"},
-    {"id": "calorie_master", "name": "Maître des Calories", "description": "14 jours dans l'objectif calorique", "threshold": 14, "xp": 400, "icon": "🔥", "color": "#FFD700"},
-    {"id": "nutrition_champion", "name": "Champion Nutrition", "description": "Score nutritionnel > 80% pendant 30 jours", "threshold": 30, "xp": 1000, "icon": "🏆", "color": "#00BFFF"},
+    # ═══════════════════════════════════════
+    # CATÉGORIE 1 — RÉGULARITÉ (streaks suivi)
+    # ═══════════════════════════════════════
+    {"id": "streak_1",   "name": "Première Journée",     "description": "1 jour de suivi nutritionnel",      "threshold": 1,   "xp": 25,   "icon": "🌱", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_3",   "name": "3 Jours Consécutifs",  "description": "3 jours de suivi consécutifs",      "threshold": 3,   "xp": 50,   "icon": "🔥", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_7",   "name": "Semaine Parfaite",      "description": "7 jours de suivi consécutifs",      "threshold": 7,   "xp": 150,  "icon": "⚡", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_14",  "name": "Deux Semaines",         "description": "14 jours de suivi consécutifs",     "threshold": 14,  "xp": 300,  "icon": "💪", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_21",  "name": "Trois Semaines",        "description": "21 jours de suivi consécutifs",     "threshold": 21,  "xp": 450,  "icon": "🎯", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_30",  "name": "Un Mois Complet",       "description": "30 jours de suivi consécutifs",     "threshold": 30,  "xp": 750,  "icon": "🏅", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_60",  "name": "Deux Mois",             "description": "60 jours de suivi consécutifs",     "threshold": 60,  "xp": 1500, "icon": "🥈", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_90",  "name": "Trois Mois",            "description": "90 jours de suivi consécutifs",     "threshold": 90,  "xp": 2500, "icon": "🥇", "color": "#B0E301", "type": "days_tracked"},
+    {"id": "streak_180", "name": "Six Mois",              "description": "180 jours de suivi consécutifs",    "threshold": 180, "xp": 5000, "icon": "👑", "color": "#FFD700", "type": "days_tracked"},
+    {"id": "streak_365", "name": "Une Année Entière",     "description": "365 jours de suivi consécutifs",    "threshold": 365, "xp": 10000,"icon": "🌟", "color": "#FFD700", "type": "days_tracked"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 2 — CALORIES (objectif atteint)
+    # ═══════════════════════════════════════
+    {"id": "cal_1",   "name": "Premier Objectif Cal.",    "description": "Objectif calorique atteint 1×",     "threshold": 1,   "xp": 30,   "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_3",   "name": "3× Objectif Calories",    "description": "Objectif calorique atteint 3×",     "threshold": 3,   "xp": 75,   "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_5",   "name": "5× Objectif Calories",    "description": "Objectif calorique atteint 5×",     "threshold": 5,   "xp": 120,  "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_10",  "name": "10× Objectif Calories",   "description": "Objectif calorique atteint 10×",    "threshold": 10,  "xp": 250,  "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_20",  "name": "20× Objectif Calories",   "description": "Objectif calorique atteint 20×",    "threshold": 20,  "xp": 500,  "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_30",  "name": "Maître des Calories",      "description": "Objectif calorique atteint 30×",    "threshold": 30,  "xp": 750,  "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_50",  "name": "50× Objectif Calories",   "description": "Objectif calorique atteint 50×",    "threshold": 50,  "xp": 1200, "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_75",  "name": "75× Objectif Calories",   "description": "Objectif calorique atteint 75×",    "threshold": 75,  "xp": 1800, "icon": "🔥", "color": "#FF6B35", "type": "days_calorie_target"},
+    {"id": "cal_100", "name": "Centurion Calorique",      "description": "Objectif calorique atteint 100×",   "threshold": 100, "xp": 3000, "icon": "💯", "color": "#FFD700", "type": "days_calorie_target"},
+    {"id": "cal_200", "name": "Légende Calorique",        "description": "Objectif calorique atteint 200×",   "threshold": 200, "xp": 6000, "icon": "🌟", "color": "#FFD700", "type": "days_calorie_target"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 3 — PROTÉINES (objectif atteint)
+    # ═══════════════════════════════════════
+    {"id": "prot_1",   "name": "Première Protéine",       "description": "Objectif protéines atteint 1×",     "threshold": 1,   "xp": 30,   "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_3",   "name": "3× Objectif Protéines",  "description": "Objectif protéines atteint 3×",     "threshold": 3,   "xp": 80,   "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_5",   "name": "5× Objectif Protéines",  "description": "Objectif protéines atteint 5×",     "threshold": 5,   "xp": 130,  "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_7",   "name": "Roi des Protéines",       "description": "Objectif protéines atteint 7×",     "threshold": 7,   "xp": 200,  "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_14",  "name": "Champion Protéine",       "description": "Objectif protéines atteint 14×",    "threshold": 14,  "xp": 400,  "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_21",  "name": "Maître des Acides Am.",   "description": "Objectif protéines atteint 21×",    "threshold": 21,  "xp": 600,  "icon": "💪", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_30",  "name": "30× Objectif Protéines", "description": "Objectif protéines atteint 30×",    "threshold": 30,  "xp": 900,  "icon": "🏋️", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_50",  "name": "50× Objectif Protéines", "description": "Objectif protéines atteint 50×",    "threshold": 50,  "xp": 1500, "icon": "🏋️", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_75",  "name": "75× Objectif Protéines", "description": "Objectif protéines atteint 75×",    "threshold": 75,  "xp": 2200, "icon": "🏋️", "color": "#B0E301", "type": "days_protein_target"},
+    {"id": "prot_100", "name": "Centurion Protéines",     "description": "Objectif protéines atteint 100×",   "threshold": 100, "xp": 4000, "icon": "🥩", "color": "#FFD700", "type": "days_protein_target"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 4 — REPAS GÉNÉRÉS / LOGGÉS
+    # ═══════════════════════════════════════
+    {"id": "meal_1",   "name": "Premier Repas",           "description": "1 repas enregistré",                "threshold": 1,   "xp": 20,   "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_5",   "name": "5 Repas",                 "description": "5 repas enregistrés",               "threshold": 5,   "xp": 50,   "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_10",  "name": "10 Repas",                "description": "10 repas enregistrés",              "threshold": 10,  "xp": 100,  "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_25",  "name": "25 Repas",                "description": "25 repas enregistrés",              "threshold": 25,  "xp": 200,  "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_50",  "name": "50 Repas",                "description": "50 repas enregistrés",              "threshold": 50,  "xp": 400,  "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_100", "name": "100 Repas",               "description": "100 repas enregistrés",             "threshold": 100, "xp": 800,  "icon": "🍽️", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_200", "name": "200 Repas",               "description": "200 repas enregistrés",             "threshold": 200, "xp": 1600, "icon": "👨‍🍳", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_365", "name": "365 Repas",               "description": "365 repas enregistrés",             "threshold": 365, "xp": 3000, "icon": "👨‍🍳", "color": "#6441a5", "type": "total_meals"},
+    {"id": "meal_500", "name": "Gourmet 500",             "description": "500 repas enregistrés",             "threshold": 500, "xp": 5000, "icon": "⭐", "color": "#FFD700", "type": "total_meals"},
+    {"id": "meal_1000","name": "Chef Légendaire",         "description": "1000 repas enregistrés",             "threshold": 1000,"xp": 10000,"icon": "👑", "color": "#FFD700", "type": "total_meals"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 5 — DIVERSITÉ & QUALITÉ
+    # ═══════════════════════════════════════
+    {"id": "first_balanced",  "name": "Premier Équilibre",   "description": "1er repas parfaitement équilibré",  "threshold": 1,  "xp": 50,   "icon": "🥗", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_3",      "name": "3 Jours Équilibrés",  "description": "3 jours d'alimentation équilibrée", "threshold": 3,  "xp": 100,  "icon": "🥗", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_5",      "name": "5 Jours Équilibrés",  "description": "5 jours d'alimentation équilibrée", "threshold": 5,  "xp": 200,  "icon": "🥗", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_7",      "name": "Semaine Équilibrée",  "description": "7 jours d'alimentation équilibrée", "threshold": 7,  "xp": 350,  "icon": "⚖️", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_10",     "name": "Équilibriste",        "description": "10 jours d'alimentation équilibrée","threshold": 10, "xp": 500,  "icon": "⚖️", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_14",     "name": "14 Jours Équilibrés", "description": "14 jours d'alimentation équilibrée","threshold": 14, "xp": 700,  "icon": "⚖️", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_21",     "name": "3 Semaines Parfaites","description": "21 jours d'alimentation équilibrée","threshold": 21, "xp": 1000, "icon": "🎯", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_30",     "name": "Mois Parfait",        "description": "30 jours d'alimentation équilibrée","threshold": 30, "xp": 2000, "icon": "🏅", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_60",     "name": "2 Mois Parfaits",     "description": "60 jours d'alimentation équilibrée","threshold": 60, "xp": 4000, "icon": "🥈", "color": "#00BFFF", "type": "days_balanced"},
+    {"id": "balanced_90",     "name": "Nutrition Champion",  "description": "90 jours d'alimentation équilibrée","threshold": 90, "xp": 7500, "icon": "🏆", "color": "#FFD700", "type": "days_balanced"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 6 — REPAS IA GÉNÉRÉS
+    # ═══════════════════════════════════════
+    {"id": "ai_1",    "name": "Premier Repas IA",          "description": "1 repas généré par l'IA",           "threshold": 1,   "xp": 25,   "icon": "🤖", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_5",    "name": "5 Repas IA",                "description": "5 repas générés par l'IA",          "threshold": 5,   "xp": 60,   "icon": "🤖", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_10",   "name": "10 Repas IA",               "description": "10 repas générés par l'IA",         "threshold": 10,  "xp": 120,  "icon": "🤖", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_25",   "name": "25 Repas IA",               "description": "25 repas générés par l'IA",         "threshold": 25,  "xp": 300,  "icon": "🤖", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_50",   "name": "Ami de l'IA",               "description": "50 repas générés par l'IA",         "threshold": 50,  "xp": 600,  "icon": "🤖", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_100",  "name": "100 Repas IA",              "description": "100 repas générés par l'IA",        "threshold": 100, "xp": 1200, "icon": "⚡", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_200",  "name": "200 Repas IA",              "description": "200 repas générés par l'IA",        "threshold": 200, "xp": 2500, "icon": "⚡", "color": "#a855f7", "type": "ai_meals"},
+    {"id": "ai_500",  "name": "Maître de l'IA",            "description": "500 repas générés par l'IA",        "threshold": 500, "xp": 6000, "icon": "🌟", "color": "#FFD700", "type": "ai_meals"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 7 — SCORE NUTRITIONNEL
+    # ═══════════════════════════════════════
+    {"id": "score_50_1",  "name": "Score 50+ (1j)",        "description": "Score nutri > 50% pendant 1 jour",  "threshold": 1,   "xp": 20,   "icon": "📊", "color": "#38bdf8", "type": "score_days_50"},
+    {"id": "score_50_7",  "name": "Score 50+ (7j)",        "description": "Score nutri > 50% pendant 7 jours", "threshold": 7,   "xp": 100,  "icon": "📊", "color": "#38bdf8", "type": "score_days_50"},
+    {"id": "score_50_30", "name": "Score 50+ (30j)",       "description": "Score nutri > 50% pendant 30 jours","threshold": 30,  "xp": 500,  "icon": "📊", "color": "#38bdf8", "type": "score_days_50"},
+    {"id": "score_70_1",  "name": "Score 70+ (1j)",        "description": "Score nutri > 70% pendant 1 jour",  "threshold": 1,   "xp": 50,   "icon": "📈", "color": "#38bdf8", "type": "score_days_70"},
+    {"id": "score_70_7",  "name": "Score 70+ (7j)",        "description": "Score nutri > 70% pendant 7 jours", "threshold": 7,   "xp": 200,  "icon": "📈", "color": "#38bdf8", "type": "score_days_70"},
+    {"id": "score_70_30", "name": "Score 70+ (30j)",       "description": "Score nutri > 70% pendant 30 jours","threshold": 30,  "xp": 800,  "icon": "📈", "color": "#38bdf8", "type": "score_days_70"},
+    {"id": "score_80_1",  "name": "Score 80+ (1j)",        "description": "Score nutri > 80% pendant 1 jour",  "threshold": 1,   "xp": 75,   "icon": "🎯", "color": "#38bdf8", "type": "score_days_80"},
+    {"id": "score_80_7",  "name": "Score 80+ (7j)",        "description": "Score nutri > 80% pendant 7 jours", "threshold": 7,   "xp": 300,  "icon": "🎯", "color": "#38bdf8", "type": "score_days_80"},
+    {"id": "score_80_14", "name": "Score 80+ (14j)",       "description": "Score nutri > 80% pendant 14 jours","threshold": 14,  "xp": 600,  "icon": "🎯", "color": "#38bdf8", "type": "score_days_80"},
+    {"id": "score_80_30", "name": "Nutrition Champion",    "description": "Score nutri > 80% pendant 30 jours","threshold": 30,  "xp": 1000, "icon": "🏆", "color": "#00BFFF", "type": "score_days_80"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 8 — MACROS SPÉCIFIQUES
+    # ═══════════════════════════════════════
+    {"id": "prot_daily_150", "name": "150g de Protéines",  "description": "Dépasser 150g de protéines en 1j",  "threshold": 5,   "xp": 150,  "icon": "🥩", "color": "#B0E301", "type": "high_protein_days"},
+    {"id": "prot_daily_200", "name": "200g de Protéines",  "description": "Dépasser 200g de protéines en 1j",  "threshold": 3,   "xp": 250,  "icon": "🥩", "color": "#B0E301", "type": "very_high_protein_days"},
+    {"id": "low_cal_day",    "name": "Journée Légère",     "description": "Moins de 1500 kcal en 1 jour",      "threshold": 5,   "xp": 100,  "icon": "🥬", "color": "#38bdf8", "type": "low_calorie_days"},
+    {"id": "keto_day",       "name": "Jour Cétogène",      "description": "Moins de 50g de glucides en 1j",    "threshold": 3,   "xp": 200,  "icon": "🥑", "color": "#FF6B35", "type": "low_carb_days"},
+    {"id": "fiber_hero",     "name": "Héros des Fibres",   "description": "Repas très riches en légumes",      "threshold": 10,  "xp": 200,  "icon": "🥦", "color": "#B0E301", "type": "days_balanced"},
+    {"id": "hydra_nut",      "name": "Nutrition Complète", "description": "3 macros en objectif le même jour", "threshold": 10,  "xp": 400,  "icon": "💧", "color": "#00BFFF", "type": "days_balanced"},
+
+    # ═══════════════════════════════════════
+    # CATÉGORIE 9 — SPÉCIAUX & RÉCOMPENSES
+    # ═══════════════════════════════════════
+    {"id": "first_like",     "name": "Premier J'aime",     "description": "Premier repas aimé",                "threshold": 1,  "xp": 20,   "icon": "👍", "color": "#B0E301", "type": "liked_meals"},
+    {"id": "likes_10",       "name": "10 Repas Aimés",     "description": "10 repas ajoutés aux favoris",      "threshold": 10, "xp": 100,  "icon": "❤️", "color": "#ff4b6e", "type": "liked_meals"},
+    {"id": "likes_25",       "name": "Gourmet Affirmé",    "description": "25 repas aimés",                    "threshold": 25, "xp": 250,  "icon": "❤️", "color": "#ff4b6e", "type": "liked_meals"},
+    {"id": "likes_50",       "name": "Collection de Goûts","description": "50 repas aimés",                    "threshold": 50, "xp": 500,  "icon": "❤️", "color": "#ff4b6e", "type": "liked_meals"},
+    {"id": "first_dislike",  "name": "Sélectif",           "description": "Premier repas refusé",              "threshold": 1,  "xp": 20,   "icon": "🚫", "color": "#52525B", "type": "disliked_meals"},
+    {"id": "plan_builder_1", "name": "Mon Premier Plan",   "description": "1 plan manuel créé depuis Favoris", "threshold": 1,  "xp": 50,   "icon": "📋", "color": "#6441a5", "type": "manual_plans"},
+    {"id": "plan_builder_5", "name": "5 Plans Manuels",    "description": "5 plans manuels créés",             "threshold": 5,  "xp": 200,  "icon": "📋", "color": "#6441a5", "type": "manual_plans"},
+    {"id": "plan_week",      "name": "Semaine Planifiée",  "description": "Plan complet 4 repas 7 jours",      "threshold": 7,  "xp": 500,  "icon": "📅", "color": "#6441a5", "type": "manual_plans"},
+    {"id": "calorie_deficit_5",  "name": "5 Jours en Déficit",  "description": "5 jours consécutifs en déficit calorique",  "threshold": 5,  "xp": 200, "icon": "📉", "color": "#FF6B35", "type": "deficit_days"},
+    {"id": "calorie_deficit_14", "name": "14 Jours en Déficit", "description": "14 jours consécutifs en déficit calorique", "threshold": 14, "xp": 600, "icon": "📉", "color": "#FF6B35", "type": "deficit_days"},
+    {"id": "calorie_deficit_30", "name": "30 Jours en Déficit", "description": "30 jours consécutifs en déficit calorique", "threshold": 30, "xp": 1500,"icon": "📉", "color": "#FF6B35", "type": "deficit_days"},
 ]
+
 
 @api_router.get("/nutrition/score")
 async def get_nutrition_score(user: User = Depends(get_current_user)):
@@ -2632,57 +3064,95 @@ async def get_nutrition_score(user: User = Depends(get_current_user)):
     # Overall daily score
     daily_score = int((calorie_score * 0.4 + protein_score * 0.3 + balance_score * 0.3))
     
-    # Get weekly stats
-    week_meals = await db.meals.find({
-        "user_id": user.user_id,
-        "date": {"$gte": week_ago}
-    }, {"_id": 0, "date": 1, "calories": 1, "protein": 1}).to_list(100)
-    
-    # Group by date
+    # Get stats over last 90 days for comprehensive badge tracking
+    days_90_ago = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
+    all_user_meals = await db.meals.find(
+        {"user_id": user.user_id, "date": {"$gte": days_90_ago}},
+        {"_id": 0, "date": 1, "calories": 1, "protein": 1, "carbs": 1, "ai_generated": 1, "liked": 1}
+    ).to_list(5000)
+
+    # Also get week meals for display
+    week_meals = [m for m in all_user_meals if m.get("date", "") >= week_ago]
+
+    # Group by date (90 day window)
     daily_stats = {}
-    for meal in week_meals:
+    for meal in all_user_meals:
         date = meal.get("date")
         if date not in daily_stats:
-            daily_stats[date] = {"calories": 0, "protein": 0}
+            daily_stats[date] = {"calories": 0, "protein": 0, "carbs": 0}
         daily_stats[date]["calories"] += meal.get("calories", 0)
         daily_stats[date]["protein"] += meal.get("protein", 0)
-    
-    # Count days hitting targets
+        daily_stats[date]["carbs"] += meal.get("carbs", 0)
+
+    # Week stats for display
+    week_daily_stats = {d: s for d, s in daily_stats.items() if d >= week_ago}
+
+    # Count badge metrics across all 90 days
     days_calorie_target = 0
     days_protein_target = 0
     days_balanced = 0
-    
+    days_tracked = len(daily_stats)
+    score_days_50 = 0
+    score_days_70 = 0
+    score_days_80 = 0
+    high_protein_days = 0
+    very_high_protein_days = 0
+    low_calorie_days = 0
+    low_carb_days = 0
+    deficit_days = 0
+
     for date, stats in daily_stats.items():
-        cal_diff_pct = abs(stats["calories"] - daily_calories) / daily_calories * 100
-        if cal_diff_pct <= 15:  # Within 15% of target
-            days_calorie_target += 1
-        if stats["protein"] >= target_protein * 0.9:  # At least 90% of target
-            days_protein_target += 1
-        if cal_diff_pct <= 15 and stats["protein"] >= target_protein * 0.9:
-            days_balanced += 1
-    
-    # Get total balanced meals ever
+        cal = stats["calories"]; prot = stats["protein"]; carbs = stats["carbs"]
+        cal_diff_pct = abs(cal - daily_calories) / max(daily_calories, 1) * 100
+        cal_score_d = 100 - min(cal_diff_pct, 100)
+        prot_score_d = min((prot / max(target_protein, 1)) * 100, 100)
+        day_score = (cal_score_d * 0.5 + prot_score_d * 0.5)
+        if cal_diff_pct <= 15: days_calorie_target += 1
+        if prot >= target_protein * 0.9: days_protein_target += 1
+        if cal_diff_pct <= 15 and prot >= target_protein * 0.9: days_balanced += 1
+        if day_score >= 50: score_days_50 += 1
+        if day_score >= 70: score_days_70 += 1
+        if day_score >= 80: score_days_80 += 1
+        if prot >= 150: high_protein_days += 1
+        if prot >= 200: very_high_protein_days += 1
+        if cal < 1500 and cal > 0: low_calorie_days += 1
+        if carbs < 50 and cal > 0: low_carb_days += 1
+        if cal > 0 and cal < daily_calories * 0.9: deficit_days += 1
+
+    # Count total meals and AI meals
     all_meals = await db.meals.count_documents({"user_id": user.user_id})
-    
+    ai_meals_count = await db.meals.count_documents({"user_id": user.user_id, "ai_generated": True})
+    liked_meals_count = await db.meals.count_documents({"user_id": user.user_id, "liked": True})
+    disliked_count = len(user_doc.get("disliked_meals", []))
+    manual_plans_count = user_doc.get("manual_plans_count", 0)
+
+    badge_progress_map = {
+        "days_tracked": days_tracked,
+        "days_calorie_target": days_calorie_target,
+        "days_protein_target": days_protein_target,
+        "days_balanced": days_balanced,
+        "total_meals": all_meals,
+        "ai_meals": ai_meals_count,
+        "liked_meals": liked_meals_count,
+        "disliked_meals": disliked_count,
+        "score_days_50": score_days_50,
+        "score_days_70": score_days_70,
+        "score_days_80": score_days_80,
+        "high_protein_days": high_protein_days,
+        "very_high_protein_days": very_high_protein_days,
+        "low_calorie_days": low_calorie_days,
+        "low_carb_days": low_carb_days,
+        "deficit_days": deficit_days,
+        "manual_plans": manual_plans_count,
+    }
+
     # Calculate badges
     user_badges = user_doc.get("nutrition_badges_claimed", [])
     badges_status = []
-    
+
     for badge in NUTRITION_BADGES:
-        # Determine progress based on badge type
-        if badge["id"] == "first_balanced":
-            progress = 1 if days_balanced >= 1 else 0
-        elif badge["id"] == "protein_week":
-            progress = days_protein_target
-        elif badge["id"] == "balanced_10":
-            progress = days_balanced
-        elif badge["id"] == "calorie_master":
-            progress = days_calorie_target
-        elif badge["id"] == "nutrition_champion":
-            # Check month-long score (simplified: count days with good score)
-            progress = days_balanced
-        else:
-            progress = 0
+        badge_type = badge.get("type", "days_balanced")
+        progress = badge_progress_map.get(badge_type, 0)
         
         is_unlocked = progress >= badge["threshold"]
         is_claimed = badge["id"] in user_badges
@@ -2977,6 +3447,11 @@ async def generate_smart_planning(
     height = user_doc.get("height", 170)
     fitness_level = user_doc.get("fitness_level", "intermediate")
     
+    # Onboarding enrichment
+    main_goal = user_doc.get("main_goal", goal)
+    secondary_goals = user_doc.get("secondary_goals", [])
+    habits_to_change = user_doc.get("habits_to_change", [])
+    
     # Get recent workout history for context
     recent_workouts = await db.workouts.find(
         {"user_id": user.user_id, "completed": True},
@@ -2985,11 +3460,15 @@ async def generate_smart_planning(
     
     workout_history = [w.get("name", "") for w in recent_workouts]
     
-    prompt = f"""Generate a {days_per_week}-day weekly workout plan in French for someone with these characteristics:
-- Weight: {weight}kg, Height: {height}cm
-- Fitness level: {fitness_level}
-- Goal: {goal}
-- Recent workouts: {', '.join(workout_history[:5]) if workout_history else 'None'}
+    prompt = f"""Génère un plan d'entraînement hebdomadaire de {days_per_week} jours en français pour quelqu'un avec ces caractéristiques :
+- Poids: {weight}kg, Taille: {height}cm
+- Niveau: {fitness_level}
+- Objectif principal: {main_goal}
+- Objectifs secondaires: {', '.join(secondary_goals) if secondary_goals else 'Aucun'}
+- Habitudes à changer: {', '.join(habits_to_change) if habits_to_change else 'Aucune'}
+- Historique récent: {', '.join(workout_history[:5]) if workout_history else 'Aucun'}
+ 
+Prends en compte les objectifs secondaires pour adapter l'intensité et le type d'exercices (ex: yoga/étirements si 'gérer le stress', plus de renforcement si 'tonification').
 
 Return ONLY a valid JSON object with this exact structure:
 {{
@@ -3065,6 +3544,63 @@ async def get_plan_history(user: User = Depends(get_current_user)):
         {"_id": 0}
     ).sort("created_at", -1).to_list(20)
     return plans
+
+# ============== WEEKLY PLANNING (MANUAL) ==============
+
+class WeeklyPlanningDay(BaseModel):
+    date: str          # YYYY-MM-DD
+    shift_type: str    # 6h-18h | 7h-18h | 18h-6h | repos | repos_sport
+    workout_type: str  # aucun | renforcement | cardio | hiit | repos_actif
+    notes: Optional[str] = None
+
+@api_router.post("/planning/weekly")
+async def save_weekly_planning(days: List[WeeklyPlanningDay], user: User = Depends(get_current_user)):
+    """Sauvegarde le planning hebdomadaire manuel (type poste + séance sport par jour)."""
+    saved = []
+    for day in days:
+        doc = {
+            "user_id": user.user_id,
+            "date": day.date,
+            "shift_type": day.shift_type,
+            "workout_type": day.workout_type,
+            "notes": day.notes,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.weekly_planning.update_one(
+            {"user_id": user.user_id, "date": day.date},
+            {"$set": doc},
+            upsert=True
+        )
+        saved.append(doc)
+    return {"message": f"{len(saved)} jour(s) sauvegardé(s)", "days": saved}
+
+@api_router.get("/planning/weekly")
+async def get_weekly_planning(
+    week_start: Optional[str] = None,
+    user: User = Depends(get_current_user)
+):
+    """Récupère le planning hebdomadaire. Si week_start (YYYY-MM-DD lundi) est fourni, filtre la semaine."""
+    query = {"user_id": user.user_id}
+    if week_start:
+        try:
+            start = datetime.strptime(week_start, "%Y-%m-%d")
+            end = start + timedelta(days=7)
+            query["date"] = {
+                "$gte": week_start,
+                "$lt": end.strftime("%Y-%m-%d")
+            }
+        except ValueError:
+            pass
+    days = await db.weekly_planning.find(query, {"_id": 0}).sort("date", 1).to_list(100)
+    return days
+
+@api_router.delete("/planning/weekly/{date}")
+async def delete_weekly_planning_day(date: str, user: User = Depends(get_current_user)):
+    """Supprime un jour du planning hebdomadaire."""
+    result = await db.weekly_planning.delete_one({"user_id": user.user_id, "date": date})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Jour non trouvé")
+    return {"message": "Jour supprimé"}
 
 # ============== PROGRAM IMPORT (JSON) ==============
 
