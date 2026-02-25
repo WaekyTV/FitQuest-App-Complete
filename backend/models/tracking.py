@@ -1,1 +1,39 @@
-from pydantic import BaseModel, Field from typing import List, Optional import uuid class HydrationEntry(BaseModel): glasses: int = 0 target: int = 8 date: str class StepsEntry(BaseModel): steps: int date: str class Reminder(BaseModel): reminder_id: str = Field(default_factory=lambda: f"rem_{uuid.uuid4().hex[:12]}") type: str title: str time: str days: List[str] = [] enabled: bool = True interval_hours: Optional[int] = None class ReminderCreate(BaseModel): type: str title: str time: str days: List[str] = [] enabled: bool = True interval_hours: Optional[int] = None class SleepEntry(BaseModel): date: str bedtime: str wake_time: str quality: int notes: Optional[str] = None class ProgramImport(BaseModel): program_json: str
+from pydantic import BaseModel, Field
+from typing import List, Optional
+import uuid
+
+class HydrationEntry(BaseModel):
+    glasses: int = 0
+    target: int = 8
+    date: str
+
+class StepsEntry(BaseModel):
+    steps: int
+    date: str
+
+class Reminder(BaseModel):
+    reminder_id: str = Field(default_factory=lambda: f"rem_{uuid.uuid4().hex[:12]}")
+    type: str
+    title: str
+    time: str
+    days: List[str] = []
+    enabled: bool = True
+    interval_hours: Optional[int] = None
+
+class ReminderCreate(BaseModel):
+    type: str
+    title: str
+    time: str
+    days: List[str] = []
+    enabled: bool = True
+    interval_hours: Optional[int] = None
+
+class SleepEntry(BaseModel):
+    date: str
+    bedtime: str
+    wake_time: str
+    quality: int
+    notes: Optional[str] = None
+
+class ProgramImport(BaseModel):
+    program_json: str
