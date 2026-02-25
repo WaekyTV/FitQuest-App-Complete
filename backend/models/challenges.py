@@ -1,1 +1,19 @@
-from pydantic import BaseModel class Challenge(BaseModel): template_id: str type: str name: str description: str target: int xp_reward: int metric: str class ChallengeCreate(BaseModel): template_id: str type: str name: str description: str target: int xp_reward: int metric: str
+from pydantic import BaseModel
+
+class Challenge(BaseModel):
+    template_id: str
+    type: str
+    name: str
+    description: str
+    target: int
+    xp_reward: int
+    metric: str
+
+class ChallengeCreate(BaseModel):
+    template_id: str
+    type: str
+    name: str
+    description: str
+    target: int
+    xp_reward: int
+    metric: str
