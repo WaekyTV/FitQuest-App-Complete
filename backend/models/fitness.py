@@ -1,1 +1,88 @@
-from pydantic import BaseModel, Field from typing import List, Optional from datetime import datetime, timezone import uuid class Exercise(BaseModel): exercise_id: str = Field(default_factory=lambda: f"ex_{uuid.uuid4().hex[:12]}") name: str category: str muscle_groups: List[str] description: str instructions: List[str] tips: List[str] image_url: Optional[str] = None video_url: Optional[str] = None difficulty: str = "intermédiaire" equipment: List[str] = [] class WorkoutExercise(BaseModel): exercise_id: str sets: int = 3 reps: str = "10-12" weight: Optional[float] = None rest_seconds: int = 60 notes: Optional[str] = None class Workout(BaseModel): workout_id: str = Field(default_factory=lambda: f"wk_{uuid.uuid4().hex[:12]}") user_id: str name: str workout_type: str exercises: List[WorkoutExercise] scheduled_date: Optional[str] = None duration_minutes: Optional[int] = None intensity: str = "moyenne" completed: bool = False created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc)) class WorkoutCreate(BaseModel): name: str workout_type: str exercises: List[WorkoutExercise] scheduled_date: Optional[str] = None duration_minutes: Optional[int] = None intensity: str = "moyenne" class WorkoutLog(BaseModel): log_id: str = Field(default_factory=lambda: f"log_{uuid.uuid4().hex[:12]}") user_id: str workout_id: str date: str duration_minutes: int calories_burned: int exercises_completed: List[dict] difficulty_rating: str notes: Optional[str] = None created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc)) class WorkoutLogCreate(BaseModel): workout_id: str date: str duration_minutes: int calories_burned: int exercises_completed: List[dict] difficulty_rating: str notes: Optional[str] = None class PerformanceRecord(BaseModel): record_id: str = Field(default_factory=lambda: f"rec_{uuid.uuid4().hex[:12]}") user_id: str exercise_name: str value: str unit: str date: str created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc)) class PerformanceRecordCreate(BaseModel): exercise_name: str value: str unit: str date: str class WeightEntry(BaseModel): entry_id: str = Field(default_factory=lambda: f"we_{uuid.uuid4().hex[:12]}") user_id: str weight: float date: str created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import datetime, timezone
+import uuid
+
+class Exercise(BaseModel):
+    exercise_id: str = Field(default_factory=lambda: f"ex_{uuid.uuid4().hex[:12]}")
+    name: str
+    category: str
+    muscle_groups: List[str]
+    description: str
+    instructions: List[str]
+    tips: List[str]
+    image_url: Optional[str] = None
+    video_url: Optional[str] = None
+    difficulty: str = "intermédiaire"
+    equipment: List[str] = []
+
+class WorkoutExercise(BaseModel):
+    exercise_id: str
+    sets: int = 3
+    reps: str = "10-12"
+    weight: Optional[float] = None
+    rest_seconds: int = 60
+    notes: Optional[str] = None
+
+class Workout(BaseModel):
+    workout_id: str = Field(default_factory=lambda: f"wk_{uuid.uuid4().hex[:12]}")
+    user_id: str
+    name: str
+    workout_type: str
+    exercises: List[WorkoutExercise]
+    scheduled_date: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    intensity: str = "moyenne"
+    completed: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class WorkoutCreate(BaseModel):
+    name: str
+    workout_type: str
+    exercises: List[WorkoutExercise]
+    scheduled_date: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    intensity: str = "moyenne"
+
+class WorkoutLog(BaseModel):
+    log_id: str = Field(default_factory=lambda: f"log_{uuid.uuid4().hex[:12]}")
+    user_id: str
+    workout_id: str
+    date: str
+    duration_minutes: int
+    calories_burned: int
+    exercises_completed: List[dict]
+    difficulty_rating: str
+    notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class WorkoutLogCreate(BaseModel):
+    workout_id: str
+    date: str
+    duration_minutes: int
+    calories_burned: int
+    exercises_completed: List[dict]
+    difficulty_rating: str
+    notes: Optional[str] = None
+
+class PerformanceRecord(BaseModel):
+    record_id: str = Field(default_factory=lambda: f"rec_{uuid.uuid4().hex[:12]}")
+    user_id: str
+    exercise_name: str
+    value: str
+    unit: str
+    date: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class PerformanceRecordCreate(BaseModel):
+    exercise_name: str
+    value: str
+    unit: str
+    date: str
+
+class WeightEntry(BaseModel):
+    entry_id: str = Field(default_factory=lambda: f"we_{uuid.uuid4().hex[:12]}")
+    user_id: str
+    weight: float
+    date: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
