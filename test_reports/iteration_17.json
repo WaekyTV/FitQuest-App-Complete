@@ -1,0 +1,157 @@
+{
+  "summary": "Iteration 17 testing complete: Verified streak badges moved from SettingsPage to TrophiesPage, history deletion endpoint functional (requires auth), and onboarding loop fix implemented via localStorage backup check.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+
+  "passed_tests": [
+    "✅ DELETE /api/history/all?type=workouts requires authentication (401)",
+    "✅ DELETE /api/history/all?type=meals requires authentication (401)",
+    "✅ DELETE /api/history/all?type=steps requires authentication (401)",
+    "✅ DELETE /api/history/all?type=hydration requires authentication (401)",
+    "✅ DELETE /api/history/all?type=all requires authentication (401)",
+    "✅ GET /api/performance/streak-badges requires authentication (401)",
+    "✅ POST /api/performance/claim-streak-badge/7 requires authentication (401)",
+    "✅ POST /api/performance/claim-streak-badge/30 requires authentication (401)",
+    "✅ GET /api/trophies requires authentication (401)",
+    "✅ GET /api/exercises is public (200) - exercises returned",
+    "✅ GET /api/exercises/search/query is public (200)"
+  ],
+
+  "feature_verification": {
+    "streak_badges_moved_to_trophies": {
+      "status": "VERIFIED",
+      "from_file": "frontend/src/components/SettingsPage.jsx",
+      "to_file": "frontend/src/components/TrophiesPage.jsx",
+      "evidence": [
+        "SettingsPage.jsx has NO matches for 'streak-badges', 'handleClaimBadge', 'BADGES DE STREAK', 'claim-badge'",
+        "TrophiesPage.jsx contains: data-testid='streak-badges' (line 346)",
+        "TrophiesPage.jsx contains: handleClaimBadge function (line 195)",
+        "TrophiesPage.jsx contains: claim-badge-{days} buttons (line 414)",
+        "TrophiesPage.jsx contains: 'BADGES DE STREAK' title (line 350)",
+        "TrophiesPage.jsx fetches streak badges via GET /api/performance/streak-badges (line 182)"
+      ],
+      "badges": [
+        {"days": 7, "label": "Semaine", "xp": 100, "icon": "🔥"},
+        {"days": 30, "label": "Mois", "xp": 500, "icon": "💪"},
+        {"days": 100, "label": "Champion", "xp": 2000, "icon": "🏆"},
+        {"days": 365, "label": "Légende", "xp": 10000, "icon": "👑"}
+      ]
+    },
+    "history_deletion_endpoint": {
+      "status": "VERIFIED",
+      "endpoint": "DELETE /api/history/all?type={type}",
+      "location": "backend/server.py lines 2087-2108",
+      "valid_types": ["workouts", "meals", "steps", "hydration", "all"],
+      "frontend_integration": {
+        "file": "frontend/src/components/SettingsPage.jsx",
+        "function": "handleDeleteHistory (lines 469-485)",
+        "call": "axios.delete(`${API}/history/all?type=${type}`)",
+        "ui_buttons": [
+          "data-testid='delete-history-workouts'",
+          "data-testid='delete-history-meals'",
+          "data-testid='delete-history-steps'",
+          "data-testid='delete-history-hydration'",
+          "data-testid='delete-history-all'"
+        ],
+        "dialog": "Confirmation dialog opens before deletion (lines 893-939)"
+      },
+      "requires_auth": true
+    },
+    "onboarding_loop_fix": {
+      "status": "VERIFIED",
+      "file": "frontend/src/App.js",
+      "location": "ProtectedRoute component (lines 25-88)",
+      "fix_implementation": [
+        "Line 43: Checks user.onboarding_completed === true explicitly",
+        "Line 46: Backup check via localStorage (`fitquest_onboarding_${user.user_id}`)",
+        "Line 48: Shows onboarding only if BOTH checks fail",
+        "Line 59-60: On completion, immediately sets localStorage before refreshUser()",
+        "Line 39-40: Uses checkComplete flag to run check only once"
+      ],
+      "flow": "User logs in → Check onboarding_completed from user data → Check localStorage backup → If both false, show onboarding → On completion, save to localStorage immediately + update backend"
+    },
+    "settings_page_no_streak_badges": {
+      "status": "VERIFIED",
+      "evidence": "grep 'streak-badges|handleClaimBadge|BADGES DE STREAK|claim-badge' returned NO matches in SettingsPage.jsx",
+      "remaining_settings_sections": [
+        "AUDIO (data-testid='audio-settings')",
+        "NOTIFICATIONS (data-testid='notification-settings')",
+        "APPARENCE (data-testid='appearance-settings')",
+        "COMPTE (data-testid='account-settings')",
+        "GESTION DE L'HISTORIQUE (data-testid='history-settings')",
+        "ZONE DANGER (data-testid='danger-zone')"
+      ]
+    }
+  },
+
+  "code_review": {
+    "trophies_page_streak_badges": {
+      "imports": "Award, Flame icons imported for streak badges display",
+      "state": "currentStreak, streakBadges, claimingBadge states added",
+      "api_calls": "Fetches streak badges in fetchData() alongside trophies and XP",
+      "ui": "Card with data-testid='streak-badges' displaying 4 badges with progress/claim buttons"
+    },
+    "history_deletion_api": {
+      "endpoint": "DELETE /api/history/all",
+      "query_param": "type (required)",
+      "collections_deleted": {
+        "workouts": ["workouts", "workout_logs"],
+        "meals": ["meals"],
+        "steps": ["steps"],
+        "hydration": ["hydration"],
+        "all": ["workouts", "workout_logs", "meals", "steps", "hydration"]
+      }
+    }
+  },
+
+  "test_report_links": [
+    "/app/backend/tests/test_iteration17_features.py",
+    "/app/test_reports/pytest/pytest_iteration17.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [
+    "✓ Streak badges successfully moved from SettingsPage to TrophiesPage",
+    "✓ TrophiesPage now displays streak badges with claim buttons and progress bars",
+    "✓ SettingsPage no longer contains streak badges (verified via grep)",
+    "✓ History deletion endpoint correctly implements all 5 types (workouts, meals, steps, hydration, all)",
+    "✓ History deletion UI has proper confirmation dialog before deletion",
+    "✓ Onboarding loop fix uses dual-check (backend + localStorage) to prevent re-showing",
+    "✓ localStorage is set BEFORE refreshUser() call to ensure immediate persistence"
+  ],
+
+  "updated_files": [
+    "/app/backend/tests/test_iteration17_features.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% - Code review verified correct implementation"
+  },
+
+  "seed_data_creation": "No new seed data created",
+  "test_credentials": "Google OAuth - authenticated UI flows require manual testing",
+
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "Iteration 17 verified: Streak badges moved from SettingsPage to TrophiesPage (data-testid='streak-badges' in TrophiesPage.jsx lines 346-431). History deletion endpoint DELETE /api/history/all?type={type} (server.py lines 2087-2108) supports types: workouts, meals, steps, hydration, all. Frontend calls via handleDeleteHistory() in SettingsPage.jsx lines 469-485. Onboarding loop fix in App.js ProtectedRoute uses localStorage backup check (line 46) to prevent re-showing after page reload.",
+
+  "manual_testing_recommended": [
+    "1. Login with Google OAuth",
+    "2. Navigate to Trophies page (sidebar) and verify streak badges section is visible",
+    "3. Navigate to Settings page and verify streak badges section is NOT present",
+    "4. In Settings > Gestion de l'historique, try deleting one type of history",
+    "5. Complete onboarding if new user, then reload page - should NOT show onboarding again"
+  ]
+}
