@@ -1,51 +1,46 @@
-import React, { useEffect, useState } from 'react';
-import Confetti from 'react-confetti';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { play8BitBirthday } from '../utils/audio';
+import { toast } from 'sonner';
 
-export default function BirthdayCelebration({ isOpen, onClose, userName }) {
-  const [windowSize, setWindowSize] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
+export const BirthdayCelebration = () => {
+    const { user } = useAuth();
+    const celebratedRef = useRef(false);
 
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowSize({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    useEffect(() => {
+        if (!user?.birthdate || celebratedRef.current) return;
 
-  if (!isOpen) return null;
+        try {
+            const today = new Date();
+            const birthDate = new Date(user.birthdate);
 
-  return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-        <Confetti width={windowSize.width} height={windowSize.height} recycle={false} numberOfPieces={500} />
-        <motion.div
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0, opacity: 0 }}
-          className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-2xl text-center max-w-sm mx-4 relative overflow-hidden"
-        >
-          <div className="text-6xl mb-4">🎂</div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-            Joyeux Anniversaire {userName} !
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">
-            Une année de plus vers tes objectifs. On est fiers de toi !
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
-          >
-            Merci !
-          </button>
-        </motion.div>
-      </div>
-    </AnimatePresence>
-  );
-}
+            // Check if month and day match
+            if (today.getDate() === birthDate.getDate() &&
+                today.getMonth() === birthDate.getMonth()) {
+
+                celebratedRef.current = true;
+
+                // Delay slightly for user interaction if needed, but auto-play usually blocked
+                // We hope user has interacted with the app by now
+                setTimeout(() => {
+                    play8BitBirthday();
+
+                    toast.success("🎂 JOYEUX ANNIVERSAIRE ! 🎉", {
+                        description: "Toute l'équipe FitQuest te souhaite une excellente journée !",
+                        duration: 8000,
+                        style: {
+                            background: 'linear-gradient(135deg, #6441a5, #B0E301)',
+                            color: 'white',
+                            border: 'none',
+                            fontSize: '16px'
+                        }
+                    });
+                }, 1000);
+            }
+        } catch (e) {
+            console.error("Birthday check failed", e);
+        }
+    }, [user]);
+
+    return null;
+};
