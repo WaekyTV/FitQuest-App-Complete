@@ -1,38 +1,100 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { Play, Clock, Dumbbell, MoreVertical } from 'lucide-react';
+import {
+    MoreHorizontal,
+    Edit2,
+    Copy,
+    Trash2,
+    Play
+} from 'lucide-react';
+import { Button } from './ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from './ui/dropdown-menu';
 
-export default function SavedSequenceCard({ sequence }) {
-  return (
-    <motion.div
-      whileHover={{ y: -5 }}
-      className="bg-white dark:bg-gray-800 rounded-[2rem] p-6 shadow-xl border border-gray-100 dark:border-gray-700 group relative overflow-hidden"
-    >
-      <div className="absolute top-0 right-0 w-32 h-32 bg-blue-600 opacity-[0.03] rounded-bl-full pointer-events-none" />
-      
-      <div className="flex justify-between items-start mb-6">
-        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/40 rounded-2xl flex items-center justify-center text-blue-600">
-          <Dumbbell className="w-6 h-6" />
-        </div>
-        <button className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-colors">
-          <MoreVertical className="w-5 h-5" />
-        </button>
-      </div>
+export const SavedSequenceCard = ({ sequence, onLoad, onDelete, onEdit, onDuplicate, formatTime }) => {
+    const totalDuration = sequence.intervals.reduce((acc, int) => acc + (int.duration_seconds || 0), 0);
 
-      <h3 className="text-xl font-black mb-2 uppercase tracking-tight line-clamp-1">{sequence.name}</h3>
-      
-      <div className="flex gap-4 mb-6">
-        <div className="flex items-center gap-1.5 font-bold text-gray-500 text-sm">
-          <Clock className="w-4 h-4 text-gray-300" /> {sequence.totalTime}min
-        </div>
-        <div className="flex items-center gap-1.5 font-bold text-gray-500 text-sm">
-          <Dumbbell className="w-4 h-4 text-gray-300" /> {sequence.exercises?.length || 0} ex.
-        </div>
-      </div>
+    // Group intervals by block for the "Interval Timer" fused look
+    const blocks = sequence.blocks && sequence.blocks.length > 0
+        ? sequence.blocks
+        : [{ id: 'default', repetitions: 1, intervals: sequence.intervals }];
 
-      <button className="w-full py-4 bg-gray-900 dark:bg-black text-white rounded-2xl font-black flex items-center justify-center gap-2 group-hover:bg-blue-600 transition-all shadow-lg active:scale-95">
-        <Play className="w-4 h-4 fill-current ml-1" /> DÉMARRER
-      </button>
-    </motion.div>
-  );
-}
+    return (
+        <div className="bg-[#2D3E4B] rounded-none md:rounded-lg overflow-hidden mb-4 shadow-none md:shadow-lg border-b border-black/30 md:border md:border-white/5 transition-colors w-full">
+            {/* Header: Title and Overall Time */}
+            <div className="flex justify-between items-end p-4 pb-2">
+                <h3 className="text-xl font-bold text-white tracking-tight truncate pr-4">{sequence.name}</h3>
+                <span className="text-lg font-mono text-[#A1A1AA]">{formatTime(totalDuration)}</span>
+            </div>
+
+            {/* Visual Strip: Fused Blocks */}
+            <div className="flex w-full h-[72px] items-center bg-[#151F28] overflow-x-auto no-scrollbar gap-1 p-1">
+                {blocks.map((block, bIdx) => {
+                    const firstInterval = block.intervals[0];
+                    if (!firstInterval) return null;
+
+                    return (
+                        <div key={block.id || bIdx} className="flex h-full shrink-0">
+                            {/* Repetition Block (Fused) */}
+                            {block.repetitions > 1 && (
+                                <div className="h-full px-3 flex items-center justify-center bg-[#3D4F5C] border-r border-black/20">
+                                    <span className="text-lg font-bold text-[#A1A1AA] font-mono">{block.repetitions}x</span>
+                                </div>
+                            )}
+
+                            {/* Intervals in this block */}
+                            {block.intervals.map((int, iIdx) => (
+                                <div
+                                    key={int.id || `${bIdx}-${iIdx}`}
+                                    className="h-full min-w-[120px] flex flex-col justify-center items-center px-4 relative border-r border-black/10 last:border-none"
+                                    style={{ backgroundColor: int.color || '#D95F0E' }}
+                                >
+                                    <span className="text-xs font-bold text-white uppercase tracking-wider drop-shadow-sm mb-0.5">
+                                        {int.name}
+                                    </span>
+                                    <span className="text-base font-bold text-white drop-shadow-sm font-mono">
+                                        {formatTime(int.duration_seconds).replace(/^00:/, '')}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Footer Actions: Interval Timer Style */}
+            <div className="flex justify-between items-center px-2 py-1 bg-[#2D3E4B]">
+                <div className="flex items-center gap-1">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-10 w-10 text-[#A1A1AA] hover:text-white rounded-none">
+                                <MoreHorizontal className="w-6 h-6" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="bg-[#1E2B34] border-white/10 text-white min-w-[150px] z-[400]">
+                            <DropdownMenuItem onClick={() => onEdit && onEdit(sequence)} className="cursor-pointer hover:bg-white/5 focus:bg-white/10">
+                                <Edit2 className="w-4 h-4 mr-2 text-[#A1A1AA]" /> Modifier
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onDuplicate && onDuplicate(sequence)} className="cursor-pointer hover:bg-white/5 focus:bg-white/10">
+                                <Copy className="w-4 h-4 mr-2 text-[#A1A1AA]" /> Dupliquer
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onDelete && onDelete(sequence.id)} className="cursor-pointer hover:bg-white/5 focus:bg-white/10 text-red-400">
+                                <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+                <Button
+                    onClick={() => onLoad && onLoad(sequence)}
+                    variant="ghost"
+                    className="h-10 text-white font-bold tracking-wider flex items-center gap-2 px-4 hover:bg-white/5 group"
+                >
+                    <Play className="w-5 h-5 fill-current" />
+                    <span>COMMENCER</span>
+                </Button>
+            </div>
+        </div>
+    );
+};
